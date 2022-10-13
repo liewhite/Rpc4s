@@ -1,6 +1,12 @@
 # 基于akka的rpc框架
 
 # All-In-One example
+## Dependency
+```scala
+libraryDependencies += "io.github.liewhite" %% "rpc4s" % "0.1.1"
+```
+
+## Code
 ```scala
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
@@ -13,9 +19,11 @@ case class Req(i: Int) extends TMessage
 case class Res(i: Int) extends TMessage
 
 class Service extends RpcMain {
-  override def init(ctx: ActorContext[_]): Unit = {
+  override def init(ctx: ActorContext[_]): Unit = { 
+    // create a api endpoint
     val api = Endpoint[Req, Res]("api1")
     api.init(ctx)
+
     // create a local endpoint
     api.startLocal(
       ctx,
@@ -24,10 +32,12 @@ class Service extends RpcMain {
         Res(123)
       }
     )
+
     // call local endpoint
     api
       .call(ctx, Req(1))
       .map(item => println(s"----call response-----\n $item"))
+
     // create a cluster endpoint
     api.startCluster(
       ctx,
@@ -36,6 +46,7 @@ class Service extends RpcMain {
         Res(req.i)
       }
     )
+
     // call the cluster endpoint
     api
       .callEntity(ctx, "1", Req(1))
