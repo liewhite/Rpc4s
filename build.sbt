@@ -13,7 +13,7 @@ lazy val root = project
   .in(file("."))
   .settings(
     name := "rpc4s",
-    libraryDependencies += "io.github.liewhite" %% "json" % "0.2.0",
+    libraryDependencies += "io.github.liewhite" %% "json" % "1.0.0",
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-actor-typed" % AkkaVersion,
       "com.typesafe.akka" %% "akka-cluster-typed" % AkkaVersion,

@@ -1,3 +1,5 @@
+package io.github.liewhite.rpc4s
+
 import akka.actor.typed._
 import akka.actor.typed.scaladsl._
 import scala.concurrent.Promise
@@ -23,7 +25,7 @@ abstract class RpcMain() {
       Behaviors
         .setup(ctx => {
           init(ctx)
-          Behaviors.empty
+          Behaviors.same
         }),
       clusterName,
       ConfigFactory.load(configName)
