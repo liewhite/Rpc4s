@@ -9,7 +9,7 @@ case class Req(i: Int) extends TMessage
 case class Res(i: Int) extends TMessage
 
 class Service extends RpcMain {
-  override def init(ctx: ActorContext[?]): Unit = {
+  override def init(ctx: ActorContext[_]): Unit = {
     val api = Endpoint[Req, Res]("api1")
     api.init(ctx)
     api.startLocal(

@@ -16,8 +16,10 @@ import scala.util.Try
 import scala.util.Success
 
 abstract class RpcMain() {
+  var worker: ActorSystem[_] = null
+
   def start(configName: String, clusterName: String = "RPC") = {
-    val worker = ActorSystem(
+    worker = ActorSystem(
       Behaviors
         .setup(ctx => {
           init(ctx)
@@ -27,8 +29,8 @@ abstract class RpcMain() {
       ConfigFactory.load(configName)
     )
   }
+  def shutdown() = {
+    worker.terminate()
+  }
   def init(ctx: ActorContext[_]): Unit
 }
-
-
-
