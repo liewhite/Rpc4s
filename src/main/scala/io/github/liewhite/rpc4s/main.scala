@@ -24,11 +24,7 @@ class ClusterApi() extends ClusterEndpoint[Req, Res]("cluster-api-1", "api") {
     }
 }
 
-object Registry extends ClusterEndpointRegistry {
-    addEndpoint(ClusterApi())
-}
-
-class NodeB(config: String) extends RpcMain(Registry,config) {
+class NodeB(config: String) extends RpcMain(config) {
     override def init(ctx: ActorContext[_]): Unit = {
         val api = ClusterApi()
         api.callEntity(ctx, "1", Req(1))
@@ -48,22 +44,35 @@ class NodeB(config: String) extends RpcMain(Registry,config) {
             })
         }
     }
+
+    def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
+        Vector(ClusterApi())
+    }
 }
 
-class NodeA(config: String) extends RpcMain(Registry,config) {
+class NodeA(config: String) extends RpcMain(config) {
     override def init(ctx: ActorContext[_]): Unit = {
         println("-------------node a start----------")
     }
+    def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
+        Vector(ClusterApi())
+    }
 }
 
-class NodeC(config: String) extends RpcMain(Registry,config) {
+class NodeC(config: String) extends RpcMain(config) {
     override def init(ctx: ActorContext[_]): Unit = {
         println("-------------node c start----------")
     }
+    def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
+        Vector(ClusterApi())
+    }
 }
-class NodeD(config: String) extends RpcMain(Registry,config) {
+class NodeD(config: String) extends RpcMain(config) {
     override def init(ctx: ActorContext[_]): Unit = {
         println("-------------node d start----------")
+    }
+    def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
+        Vector(ClusterApi())
     }
 }
 
