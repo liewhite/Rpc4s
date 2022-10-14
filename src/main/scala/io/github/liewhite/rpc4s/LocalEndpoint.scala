@@ -14,8 +14,11 @@ import scala.concurrent.duration.*
 import io.github.liewhite.json.codec.*
 import io.github.liewhite.json.JsonBehavior.*
 import io.circe.Json
+import scala.util.Failure
+import scala.util.Success
 
-abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](name:String) extends AbstractEndpoint[I, O](name) {
+abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](name: String)
+    extends AbstractEndpoint[I, O](name) {
     private var local: ActorRef[String] = null
 
     def tellJson(
@@ -34,7 +37,7 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
         i: I,
         customeRequestId: Option[String] = None
     ): Unit = {
-        tellJson(ctx,i.encode, customeRequestId)
+        tellJson(ctx, i.encode, customeRequestId)
     }
 
     def call(
@@ -43,7 +46,7 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
         timeout: Duration = 30.seconds,
         customeRequestId: Option[String] = None
     ): Future[Try[O]] = {
-        callJson(ctx,i.encode,timeout,customeRequestId)
+        callJson(ctx, i.encode, timeout, customeRequestId)
     }
 
     // 幂等请求需要用户提供request id
@@ -53,7 +56,6 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
         timeout: Duration = 30.seconds,
         customeRequestId: Option[String] = None
     ): Future[Try[O]] = {
-        clientInit(ctx)
         val requestId = customeRequestId match {
             case Some(id) => id
             case None     => UUID.randomUUID().toString()
@@ -68,31 +70,58 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
 
     def startLocal(
         ctx: ActorContext[_]
-    ) = {
+    ): this.type = {
         this.synchronized {
+            clientInit(ctx)
             local = ctx.spawn(
               Behaviors.receive[String]((ctx, msg) => {
                   val req = RequestWrapper.fromMsgString[I](ctx, msg)
-                  req match
-                      case Left(value) => ctx.log.error(value.getMessage())
-                      case Right(value) => {
+                  req match {
+                      case Left(value) => {
+                          ctx.log.error(s"failed parse request msg: $value")
+                          Behaviors.same
+                      }
+                      case Right(request) => {
                           // catch error
                           val result = Try(
                             localHandle(
                               ctx,
-                              value.msg
+                              request.msg
                             )
                           )
-                          value.replyTo ! ResponseWrapper(
-                            result,
-                            value.requestId
-                          ).toMsgString(ctx)
+                          result match {
+                              case Failure(exception) => {
+                                  ctx.log.error(s"exec handler result error $exception")
+                                  Behaviors.same
+                              }
+                              case Success(value) => {
+                                  value match {
+                                      case None => {
+                                          ctx.log.info(
+                                            s"local actor exit: $name"
+                                          )
+                                          Behaviors.stopped
+                                      }
+                                      case Some(value) => {
+                                          request.replyTo ! ResponseWrapper[O](
+                                            Try(value),
+                                            request.requestId
+                                          ).toMsgString(ctx)
+                                          Behaviors.same
+
+                                      }
+                                  }
+                              }
+                          }
                       }
-                  Behaviors.same
+
+                  }
               }),
               name
             )
         }
+        this
     }
-    def localHandle(ctx: ActorContext[_], i: I): O
+
+    def localHandle(ctx: ActorContext[_], i: I): Option[O]
 }

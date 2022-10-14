@@ -14,6 +14,8 @@ import scala.concurrent.duration.*
 import io.github.liewhite.json.codec.*
 import io.github.liewhite.json.JsonBehavior.*
 import io.circe.Json
+import scala.util.Failure
+import scala.util.Success
 
 abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
     name: String,
@@ -29,24 +31,44 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
                   Behaviors.receive[String]((ctx, msg) => {
                       val req = RequestWrapper.fromMsgString[I](ctx, msg)
                       req match
-                          case Left(value) => ctx.log.error(value.getMessage())
-                          case Right(value) => {
+                          case Left(value) => {
+                              ctx.log.error(s"failed parse request msg: $value")
+                              Behaviors.same
+                          }
+                          case Right(request) => {
                               // catch error
                               val result = Try(
                                 clusterHandle(
                                   ctx,
                                   entityContext.entityId,
-                                  value.msg
+                                  request.msg
                                 )
                               )
-                              value.replyTo ! ResponseWrapper(
-                                result,
-                                value.requestId
-                              ).toMsgString(ctx)
+                              result match {
+                                  case Failure(exception) => {
+                                      ctx.log.error(s"exec handler result error $exception")
+                                      Behaviors.same
+                                  }
+                                  case Success(value) => {
+                                      value match {
+                                          case None => {
+                                              ctx.log.info(
+                                                s"entity exit: $name id: ${entityContext.entityId}"
+                                              )
+                                              Behaviors.stopped
+                                          }
+                                          case Some(value) => {
+                                              request.replyTo ! ResponseWrapper[O](
+                                                Try(value),
+                                                request.requestId
+                                              ).toMsgString(ctx)
+                                              Behaviors.same
 
+                                          }
+                                      }
+                                  }
+                              }
                           }
-                      Behaviors.same
-
                   })
           ).withRole(role)
         )
@@ -58,7 +80,7 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
         i: I,
         customeRequestId: Option[String] = None
     ): Unit = {
-        tellJson(ctx,entityId, i.encode,customeRequestId)
+        tellJson(ctx, entityId, i.encode, customeRequestId)
     }
 
     def tellJson(
@@ -105,12 +127,12 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
         timeout: Duration = 30.seconds,
         customeRequestId: Option[String] = None
     ): Future[Try[O]] = {
-        callJson(ctx,entityId,i.encode,timeout,customeRequestId)
+        callJson(ctx, entityId, i.encode, timeout, customeRequestId)
     }
 
     def clusterHandle(
         ctx: ActorContext[_],
         entityId: String,
         i: I
-    ): O
+    ): Option[O]
 }

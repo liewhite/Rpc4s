@@ -21,23 +21,47 @@ class ClusterApi() extends ClusterEndpoint[Req, Res]("cluster-api-1", "api") {
         ctx: ActorContext[_],
         entityId: String,
         i: Req
-    ): Res = {
+    ): Option[Res] = {
         ctx.log.info(s"receive cluster: $i, node: ${ctx.system.address}")
-        Res(i.i)
+        if (entityId.toInt % 2 == 0) {
+            None
+        } else {
+            Some(Res(i.i))
+
+        }
     }
+}
+
+class LocalApi() extends LocalEndpoint[Req, Res]("local-api-1") {
+    override def localHandle(ctx: ActorContext[?], i: Req): Option[Res] = {
+        ctx.log.info(s"receive local: $i, node: ${ctx.system.address}")
+        if (i.i % 2 == 0) {
+            None
+        } else {
+            Some(Res(i.i))
+        }
+    }
+
 }
 
 class NodeB(config: String) extends RpcMain(config) {
     override def init(ctx: ActorContext[_]): Unit = {
+        val localApi = LocalApi().startLocal(ctx)
+
         val api = ClusterApi()
         api.call(ctx, "1", Req(1))
             .map(item => println(s"----call entity response-----\n $item"))
-        api.tellJson(ctx, "1", Req(2).encode)
+        api.tellJson(ctx, "2", Req(2).encode)
         Future {
             Thread.sleep(3000)
             Range(3, 100).foreach(i => {
-                api.callJson(ctx,i.toString(), Req(i).encode)
+                api.callJson(ctx, i.toString(), Req(i).encode)
                     .map(item => println(s"----call entity response-----\n $item"))
+                val localResult = localApi
+                    .call(ctx, Req(i))
+                    .map(item => {
+                        ctx.log.info(s"local response : ${item}")
+                    })
                 Thread.sleep(1000)
             })
             Range(3, 100).foreach(i => {
