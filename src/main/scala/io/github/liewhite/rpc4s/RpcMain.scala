@@ -16,23 +16,22 @@ import akka.cluster.sharding.typed.scaladsl.EntityRef
 import com.typesafe.config.ConfigFactory
 import scala.util.Try
 import scala.util.Success
+import akka.cluster.typed.Cluster
 
-abstract class RpcMain() {
-  var worker: ActorSystem[_] = null
-
-  def start(configName: String, clusterName: String = "RPC") = {
-    worker = ActorSystem(
+abstract class RpcMain(configName: String, clusterRegistry: ClusterEndpointRegistry, clusterName: String = "RPC") {
+    val worker = ActorSystem(
       Behaviors
-        .setup(ctx => {
-          init(ctx)
-          Behaviors.same
-        }),
+          .setup(ctx => {
+              Cluster(ctx.system).selfMember.roles.map(clusterRegistry.nodeInit(_, ctx))
+              init(ctx)
+              Behaviors.same
+          }),
       clusterName,
       ConfigFactory.load(configName)
     )
-  }
-  def shutdown() = {
-    worker.terminate()
-  }
-  def init(ctx: ActorContext[_]): Unit
+
+    def shutdown() = {
+        worker.terminate()
+    }
+    def init(ctx: ActorContext[_]): Unit
 }

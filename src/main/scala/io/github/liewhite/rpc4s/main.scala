@@ -8,19 +8,12 @@ import io.github.liewhite.rpc4s.*
 import io.github.liewhite.json.codec.*
 import akka.actor.typed.ActorRef
 import scala.concurrent.Future
+import scala.collection.concurrent.TrieMap
 
 case class Req(i: Int)
 case class Res(i: Int)
 
-class Api1 extends Endpoint[Req, Res]("api1") {
-    override def localHandle(
-        ctx: ActorContext[_],
-        i: Req
-    ): Res = {
-        println(s"receive local: $i")
-        Res(i.i)
-    }
-
+class ClusterApi() extends ClusterEndpoint[Req, Res]("cluster-api-1", "api") {
     override def clusterHandle(
         ctx: ActorContext[_],
         entityId: String,
@@ -31,18 +24,13 @@ class Api1 extends Endpoint[Req, Res]("api1") {
     }
 }
 
-class NodeA extends RpcMain {
-    override def init(ctx: ActorContext[_]): Unit = {
-        val api = Api1()
-        api.declareEntity(
-          ctx
-        )
-    }
+object Registry extends ClusterEndpointRegistry {
+    addEndpoint(ClusterApi())
 }
 
-class NodeB extends RpcMain {
+class NodeB(config: String) extends RpcMain(config, Registry) {
     override def init(ctx: ActorContext[_]): Unit = {
-        val api = Api1()
+        val api = ClusterApi()
         api.callEntity(ctx, "1", Req(1))
             .map(item => println(s"----call entity response-----\n $item"))
         api.tellEntity(ctx, "1", Req(2))
@@ -56,22 +44,26 @@ class NodeB extends RpcMain {
     }
 }
 
-class NodeC extends RpcMain {
+class NodeA(config: String) extends RpcMain(config, Registry) {
     override def init(ctx: ActorContext[_]): Unit = {
-      val api = Api1()
-      api.startCluster(ctx)
-      println("-------------node c start----------")
+        println("-------------node a start----------")
+    }
+}
+
+class NodeC(config: String) extends RpcMain(config, Registry) {
+    override def init(ctx: ActorContext[_]): Unit = {
+        println("-------------node c start----------")
+    }
+}
+class NodeD(config: String) extends RpcMain(config, Registry) {
+    override def init(ctx: ActorContext[_]): Unit = {
+        println("-------------node d start----------")
     }
 }
 
 @main def main = {
-    val a = NodeA()
-    a.start("application_rpc_a.conf")
-
-    val b = NodeB()
-    b.start("application_rpc_b.conf")
-
-    val c = NodeC()
-    c.start("application_rpc_c.conf")
-
+    val a = NodeA("application_rpc_a.conf")
+    val c = NodeC("application_rpc_c.conf")
+    val d = NodeD("application_rpc_d.conf")
+    val b = NodeB("application_rpc_b.conf")
 }
