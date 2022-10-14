@@ -12,13 +12,15 @@ import akka.cluster.sharding.typed.scaladsl.*
 import scala.concurrent.ExecutionContext.Implicits.*
 import scala.concurrent.duration.*
 import io.github.liewhite.json.codec.*
+import io.github.liewhite.json.JsonBehavior.*
+import io.circe.Json
 
 abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](name:String) extends AbstractEndpoint[I, O](name) {
     private var local: ActorRef[String] = null
 
-    def tell(
+    def tellJson(
         ctx: ActorContext[_],
-        i: I,
+        i: Json,
         customeRequestId: Option[String] = None
     ): Unit = {
         val requestId = customeRequestId match {
@@ -27,11 +29,27 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
         }
         local ! RequestWrapper(i, requestId, ctx.system.ignoreRef).toMsgString(ctx)
     }
+    def tell(
+        ctx: ActorContext[_],
+        i: I,
+        customeRequestId: Option[String] = None
+    ): Unit = {
+        tellJson(ctx,i.encode, customeRequestId)
+    }
 
-    // 幂等请求需要用户提供request id
     def call(
         ctx: ActorContext[_],
         i: I,
+        timeout: Duration = 30.seconds,
+        customeRequestId: Option[String] = None
+    ): Future[Try[O]] = {
+        callJson(ctx,i.encode,timeout,customeRequestId)
+    }
+
+    // 幂等请求需要用户提供request id
+    def callJson(
+        ctx: ActorContext[_],
+        i: Json,
         timeout: Duration = 30.seconds,
         customeRequestId: Option[String] = None
     ): Future[Try[O]] = {
@@ -47,6 +65,7 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
         local ! RequestWrapper(i, requestId, callbackActor).toMsgString(ctx)
         promise.future
     }
+
     def startLocal(
         ctx: ActorContext[_]
     ) = {
