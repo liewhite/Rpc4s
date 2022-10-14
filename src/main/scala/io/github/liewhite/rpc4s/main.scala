@@ -35,6 +35,12 @@ class NodeB(config: String) extends RpcMain(config, Registry) {
             .map(item => println(s"----call entity response-----\n $item"))
         api.tellEntity(ctx, "1", Req(2))
         Future {
+            Thread.sleep(3000)
+            Range(3, 100).foreach(i => {
+                api.callEntity(ctx, i.toString(), Req(i))
+                    .map(item => println(s"----call entity response-----\n $item"))
+                Thread.sleep(1000)
+            })
             Range(3, 100).foreach(i => {
                 api.callEntity(ctx, i.toString(), Req(i))
                     .map(item => println(s"----call entity response-----\n $item"))
