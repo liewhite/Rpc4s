@@ -23,9 +23,6 @@ class ClusterEndpointRegistry {
         map.get(role)
             .map(es => {
                 es.foreach(item => {
-                    ctx.log.info(
-                      s"---------init endpoint: ${item.typeKey.name} on node ${ctx.system.address}: ${ctx.system.address} with role: $role"
-                    )
                     item.declareEntity(ctx)
                 })
             })

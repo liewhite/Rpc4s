@@ -46,7 +46,7 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
 
     private def createCallbackActor(ctx: ActorContext[_]) = {
         val actorName = s"${name}_callback_${UUID.randomUUID().toString()}"
-        ctx.log.info("creating callback actor for {}", actorName)
+        ctx.log.info(s"creating callback actor ${actorName} " )
         callbackActor = ctx.spawn(
           Behaviors.receive[String]((ctx, msg) => {
               ResponseWrapper.fromMsgString[O](ctx, msg) match {

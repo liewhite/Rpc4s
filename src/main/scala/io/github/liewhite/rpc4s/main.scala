@@ -19,7 +19,7 @@ class ClusterApi() extends ClusterEndpoint[Req, Res]("cluster-api-1", "api") {
         entityId: String,
         i: Req
     ): Res = {
-        println(s"receive cluster: $i, node: ${ctx.system.address}")
+        ctx.log.info(s"receive cluster: $i, node: ${ctx.system.address}")
         Res(i.i)
     }
 }
@@ -28,7 +28,7 @@ object Registry extends ClusterEndpointRegistry {
     addEndpoint(ClusterApi())
 }
 
-class NodeB(config: String) extends RpcMain(config, Registry) {
+class NodeB(config: String) extends RpcMain(Registry,config) {
     override def init(ctx: ActorContext[_]): Unit = {
         val api = ClusterApi()
         api.callEntity(ctx, "1", Req(1))
@@ -50,26 +50,26 @@ class NodeB(config: String) extends RpcMain(config, Registry) {
     }
 }
 
-class NodeA(config: String) extends RpcMain(config, Registry) {
+class NodeA(config: String) extends RpcMain(Registry,config) {
     override def init(ctx: ActorContext[_]): Unit = {
         println("-------------node a start----------")
     }
 }
 
-class NodeC(config: String) extends RpcMain(config, Registry) {
+class NodeC(config: String) extends RpcMain(Registry,config) {
     override def init(ctx: ActorContext[_]): Unit = {
         println("-------------node c start----------")
     }
 }
-class NodeD(config: String) extends RpcMain(config, Registry) {
+class NodeD(config: String) extends RpcMain(Registry,config) {
     override def init(ctx: ActorContext[_]): Unit = {
         println("-------------node d start----------")
     }
 }
 
 @main def main = {
-    val a = NodeA("application_rpc_a.conf")
-    val c = NodeC("application_rpc_c.conf")
-    val d = NodeD("application_rpc_d.conf")
-    val b = NodeB("application_rpc_b.conf")
+    val a = NodeA("conf/a.conf")
+    val c = NodeC("conf/c.conf")
+    val d = NodeD("conf/d.conf")
+    val b = NodeB("conf/b.conf")
 }
