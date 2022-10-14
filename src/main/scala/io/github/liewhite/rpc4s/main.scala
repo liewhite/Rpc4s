@@ -9,9 +9,12 @@ import io.github.liewhite.json.codec.*
 import akka.actor.typed.ActorRef
 import scala.concurrent.Future
 import scala.collection.concurrent.TrieMap
+import io.circe.Json
+import io.github.liewhite.json.JsonBehavior.*
+import io.github.liewhite.json.codec.*
 
-case class Req(i: Int)
-case class Res(i: Int)
+case class Req(i: Int) derives Encoder, Decoder
+case class Res(i: Int) derives Encoder, Decoder
 
 class ClusterApi() extends ClusterEndpoint[Req, Res]("cluster-api-1", "api") {
     override def clusterHandle(
@@ -27,18 +30,18 @@ class ClusterApi() extends ClusterEndpoint[Req, Res]("cluster-api-1", "api") {
 class NodeB(config: String) extends RpcMain(config) {
     override def init(ctx: ActorContext[_]): Unit = {
         val api = ClusterApi()
-        api.callEntity(ctx, "1", Req(1))
+        api.call(ctx, "1", Req(1))
             .map(item => println(s"----call entity response-----\n $item"))
-        api.tellEntity(ctx, "1", Req(2))
+        api.tellJson(ctx, "1", Req(2).encode)
         Future {
             Thread.sleep(3000)
             Range(3, 100).foreach(i => {
-                api.callEntity(ctx, i.toString(), Req(i))
+                api.callJson(ctx,i.toString(), Req(i).encode)
                     .map(item => println(s"----call entity response-----\n $item"))
                 Thread.sleep(1000)
             })
             Range(3, 100).foreach(i => {
-                api.callEntity(ctx, i.toString(), Req(i))
+                api.callJson(ctx, i.toString(), Req(i).encode)
                     .map(item => println(s"----call entity response-----\n $item"))
                 Thread.sleep(1000)
             })

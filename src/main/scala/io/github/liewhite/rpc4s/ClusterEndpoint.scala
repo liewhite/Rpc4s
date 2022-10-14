@@ -12,6 +12,8 @@ import akka.cluster.sharding.typed.scaladsl.*
 import scala.concurrent.ExecutionContext.Implicits.*
 import scala.concurrent.duration.*
 import io.github.liewhite.json.codec.*
+import io.github.liewhite.json.JsonBehavior.*
+import io.circe.Json
 
 abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
     name: String,
@@ -50,10 +52,19 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
         )
 
     }
-    def tellEntity(
+    def tell(
         ctx: ActorContext[_],
         entityId: String,
         i: I,
+        customeRequestId: Option[String] = None
+    ): Unit = {
+        tellJson(ctx,entityId, i.encode,customeRequestId)
+    }
+
+    def tellJson(
+        ctx: ActorContext[_],
+        entityId: String,
+        i: Json,
         customeRequestId: Option[String] = None
     ): Unit = {
         val requestId = customeRequestId match {
@@ -65,11 +76,10 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
         entity ! RequestWrapper(i, requestId, ctx.system.ignoreRef).toMsgString(ctx)
     }
 
-    // 幂等请求需要用户提供request id
-    def callEntity(
+    def callJson(
         ctx: ActorContext[_],
         entityId: String,
-        i: I,
+        i: Json,
         timeout: Duration = 30.seconds,
         customeRequestId: Option[String] = None
     ): Future[Try[O]] = {
@@ -85,6 +95,17 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
         val entity: EntityRef[String] = ClusterSharding(ctx.system).entityRefFor(typeKey, entityId)
         entity ! RequestWrapper(i, requestId, callbackActor).toMsgString(ctx)
         promise.future
+    }
+
+    // 幂等请求需要用户提供request id
+    def call(
+        ctx: ActorContext[_],
+        entityId: String,
+        i: I,
+        timeout: Duration = 30.seconds,
+        customeRequestId: Option[String] = None
+    ): Future[Try[O]] = {
+        callJson(ctx,entityId,i.encode,timeout,customeRequestId)
     }
 
     def clusterHandle(
