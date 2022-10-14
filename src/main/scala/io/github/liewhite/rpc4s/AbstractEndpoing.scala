@@ -5,6 +5,7 @@ import scala.util.Try
 import java.time.ZonedDateTime
 import scala.concurrent.Promise
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import java.util.UUID
 import akka.actor.typed.*
 import akka.actor.typed.scaladsl.*
@@ -12,6 +13,8 @@ import akka.cluster.sharding.typed.scaladsl.*
 import scala.concurrent.ExecutionContext.Implicits.*
 import scala.concurrent.duration.*
 import io.github.liewhite.json.codec.*
+
+case class ResponseWithStatus[T](res:T, exit: Boolean = false)
 
 abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](name: String) {
     var callable: Boolean                         = false
@@ -60,5 +63,19 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
           }),
           actorName
         )
+    }
+    def requestIdFromOption(requestId: Option[String]) = {
+        requestId match {
+            case Some(id) => id
+            case None     => UUID.randomUUID().toString()
+        }
+    }
+
+    def prepareRequest(requestId: String, timeout: Duration) = {
+        val promise = Promise[Try[O]]
+        requests.addOne(
+          (requestId, (ZonedDateTime.now().plusSeconds(timeout.toSeconds), promise))
+        )
+        promise
     }
 }

@@ -21,24 +21,23 @@ class ClusterApi() extends ClusterEndpoint[Req, Res]("cluster-api-1", "api") {
         ctx: ActorContext[_],
         entityId: String,
         i: Req
-    ): Option[Res] = {
+    ): ResponseWithStatus[Res] = {
         ctx.log.info(s"receive cluster: $i, node: ${ctx.system.address}")
         if (entityId.toInt % 2 == 0) {
-            None
+            ResponseWithStatus(Res(i.i), true)
         } else {
-            Some(Res(i.i))
-
+            ResponseWithStatus(Res(i.i), false)
         }
     }
 }
 
 class LocalApi() extends LocalEndpoint[Req, Res]("local-api-1") {
-    override def localHandle(ctx: ActorContext[?], i: Req): Option[Res] = {
+    override def localHandle(ctx: ActorContext[?], i: Req): ResponseWithStatus[Res] = {
         ctx.log.info(s"receive local: $i, node: ${ctx.system.address}")
-        if (i.i % 2 == 0) {
-            None
+        if (i.i > 20) {
+           ResponseWithStatus(Res(i.i), true)
         } else {
-            Some(Res(i.i))
+            ResponseWithStatus(Res(i.i), false)
         }
     }
 

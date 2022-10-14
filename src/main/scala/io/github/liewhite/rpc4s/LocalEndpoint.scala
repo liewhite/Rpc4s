@@ -26,10 +26,7 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
         i: Json,
         customeRequestId: Option[String] = None
     ): Unit = {
-        val requestId = customeRequestId match {
-            case Some(id) => id
-            case None     => UUID.randomUUID().toString()
-        }
+        val requestId = requestIdFromOption(customeRequestId)
         local ! RequestWrapper(i, requestId, ctx.system.ignoreRef).toMsgString(ctx)
     }
     def tell(
@@ -56,14 +53,8 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
         timeout: Duration = 30.seconds,
         customeRequestId: Option[String] = None
     ): Future[Try[O]] = {
-        val requestId = customeRequestId match {
-            case Some(id) => id
-            case None     => UUID.randomUUID().toString()
-        }
-        val promise = Promise[Try[O]]
-        requests.addOne(
-          (requestId, (ZonedDateTime.now().plusSeconds(timeout.toSeconds), promise))
-        )
+        val requestId = requestIdFromOption(customeRequestId)
+        val promise   = prepareRequest(requestId, timeout)
         local ! RequestWrapper(i, requestId, callbackActor).toMsgString(ctx)
         promise.future
     }
@@ -94,22 +85,19 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
                                   ctx.log.error(s"exec handler result error $exception")
                                   Behaviors.same
                               }
-                              case Success(value) => {
-                                  value match {
-                                      case None => {
-                                          ctx.log.info(
-                                            s"local actor exit: $name"
-                                          )
-                                          Behaviors.stopped
-                                      }
-                                      case Some(value) => {
-                                          request.replyTo ! ResponseWrapper[O](
-                                            Try(value),
-                                            request.requestId
-                                          ).toMsgString(ctx)
-                                          Behaviors.same
+                              case Success(ResponseWithStatus(res, exit)) => {
+                                  if (exit) {
+                                      ctx.log.info(
+                                        s"local actor exit: $name"
+                                      )
+                                      Behaviors.stopped
+                                  } else {
+                                      request.replyTo ! ResponseWrapper[O](
+                                        Try(res),
+                                        request.requestId
+                                      ).toMsgString(ctx)
+                                      Behaviors.same
 
-                                      }
                                   }
                               }
                           }
@@ -123,5 +111,5 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
         this
     }
 
-    def localHandle(ctx: ActorContext[_], i: I): Option[O]
+    def localHandle(ctx: ActorContext[_], i: I): ResponseWithStatus[O]
 }

@@ -49,22 +49,20 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
                                       ctx.log.error(s"exec handler result error $exception")
                                       Behaviors.same
                                   }
-                                  case Success(value) => {
-                                      value match {
-                                          case None => {
-                                              ctx.log.info(
-                                                s"entity exit: $name id: ${entityContext.entityId}"
-                                              )
-                                              Behaviors.stopped
-                                          }
-                                          case Some(value) => {
-                                              request.replyTo ! ResponseWrapper[O](
-                                                Try(value),
-                                                request.requestId
-                                              ).toMsgString(ctx)
-                                              Behaviors.same
+                                  case Success(ResponseWithStatus(res, exit)) => {
+                                      if (exit) {
+                                          ctx.log.info(
+                                            s"entity exit: $name id: ${entityContext.entityId}"
+                                          )
+                                          Behaviors.stopped
 
-                                          }
+                                      } else {
+                                          request.replyTo ! ResponseWrapper[O](
+                                            Try(res),
+                                            request.requestId
+                                          ).toMsgString(ctx)
+                                          Behaviors.same
+
                                       }
                                   }
                               }
@@ -72,8 +70,8 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
                   })
           ).withRole(role)
         )
-
     }
+
     def tell(
         ctx: ActorContext[_],
         entityId: String,
@@ -89,10 +87,7 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
         i: Json,
         customeRequestId: Option[String] = None
     ): Unit = {
-        val requestId = customeRequestId match {
-            case Some(id) => id
-            case None     => UUID.randomUUID().toString()
-        }
+        val requestId = requestIdFromOption(customeRequestId)
         val entity: EntityRef[String] =
             ClusterSharding(ctx.system).entityRefFor(typeKey, entityId)
         entity ! RequestWrapper(i, requestId, ctx.system.ignoreRef).toMsgString(ctx)
@@ -106,14 +101,8 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
         customeRequestId: Option[String] = None
     ): Future[Try[O]] = {
         clientInit(ctx)
-        val requestId = customeRequestId match {
-            case Some(id) => id
-            case None     => UUID.randomUUID().toString()
-        }
-        val promise = Promise[Try[O]]
-        requests.addOne(
-          (requestId, (ZonedDateTime.now().plusSeconds(timeout.toSeconds), promise))
-        )
+        val requestId                 = requestIdFromOption(customeRequestId)
+        val promise                   = prepareRequest(requestId, timeout)
         val entity: EntityRef[String] = ClusterSharding(ctx.system).entityRefFor(typeKey, entityId)
         entity ! RequestWrapper(i, requestId, callbackActor).toMsgString(ctx)
         promise.future
@@ -134,5 +123,6 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
         ctx: ActorContext[_],
         entityId: String,
         i: I
-    ): Option[O]
+    ): ResponseWithStatus[O]
+
 }
