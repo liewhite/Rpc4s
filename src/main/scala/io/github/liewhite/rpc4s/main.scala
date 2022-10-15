@@ -97,6 +97,7 @@ class NodeC(config: String) extends RpcMain(config) {
 class NodeD(config: String) extends RpcMain(config) {
     override def init(ctx: ActorContext[_]): Unit = {
         println("-------------node d start----------")
+
     }
     def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
         Vector(WorkerPool())
