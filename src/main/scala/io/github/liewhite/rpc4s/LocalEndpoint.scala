@@ -17,8 +17,10 @@ import io.circe.Json
 import scala.util.Failure
 import scala.util.Success
 
-abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](name: String)
-    extends AbstractEndpoint[I, O](name) {
+// Local endpoint 创建出来大概率是要调用的
+abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
+    name: String,
+) extends AbstractEndpoint[I, O](name) {
     private var local: ActorRef[String] = null
 
     def tellJson(

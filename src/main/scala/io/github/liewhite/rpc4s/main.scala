@@ -30,12 +30,22 @@ class ClusterApi() extends ClusterEndpoint[Req, Res]("cluster-api-1", "api") {
         }
     }
 }
+class WorkerPool() extends ClusterWorkerPoolEndpoint[Req, Res]("cluster-worker-1", 3, "api") {
+    override def clusterHandle(
+        ctx: ActorContext[_],
+        entityId: String,
+        i: Req
+    ): ResponseWithStatus[Res] = {
+        ctx.log.info(s"worker receive cluster: $i, ${entityId} node: ${ctx.system.address}")
+        ResponseWithStatus(Res(i.i), false)
+    }
+}
 
 class LocalApi() extends LocalEndpoint[Req, Res]("local-api-1") {
     override def localHandle(ctx: ActorContext[?], i: Req): ResponseWithStatus[Res] = {
         ctx.log.info(s"receive local: $i, node: ${ctx.system.address}")
         if (i.i > 20) {
-           ResponseWithStatus(Res(i.i), true)
+            ResponseWithStatus(Res(i.i), true)
         } else {
             ResponseWithStatus(Res(i.i), false)
         }
@@ -45,34 +55,25 @@ class LocalApi() extends LocalEndpoint[Req, Res]("local-api-1") {
 
 class NodeB(config: String) extends RpcMain(config) {
     override def init(ctx: ActorContext[_]): Unit = {
-        val localApi = LocalApi().startLocal(ctx)
+        val api = WorkerPool().clientInit(ctx)
 
-        val api = ClusterApi()
-        api.call(ctx, "1", Req(1))
-            .map(item => println(s"----call entity response-----\n $item"))
-        api.tellJson(ctx, "2", Req(2).encode)
         Future {
             Thread.sleep(3000)
             Range(3, 100).foreach(i => {
-                api.callJson(ctx, i.toString(), Req(i).encode)
+                api.callWorker(ctx, Req(i))
                     .map(item => println(s"----call entity response-----\n $item"))
-                val localResult = localApi
-                    .call(ctx, Req(i))
-                    .map(item => {
-                        ctx.log.info(s"local response : ${item}")
-                    })
                 Thread.sleep(1000)
             })
             Range(3, 100).foreach(i => {
-                api.callJson(ctx, i.toString(), Req(i).encode)
+                api.callWorkerJson(ctx, Req(i).encode)
                     .map(item => println(s"----call entity response-----\n $item"))
                 Thread.sleep(1000)
             })
-        }
+        }.onComplete(i => ctx.log.info(s"---------------future result $i"))
     }
 
     def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(ClusterApi())
+        Vector(WorkerPool())
     }
 }
 
@@ -81,7 +82,7 @@ class NodeA(config: String) extends RpcMain(config) {
         println("-------------node a start----------")
     }
     def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(ClusterApi())
+        Vector(WorkerPool())
     }
 }
 
@@ -90,7 +91,7 @@ class NodeC(config: String) extends RpcMain(config) {
         println("-------------node c start----------")
     }
     def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(ClusterApi())
+        Vector(WorkerPool())
     }
 }
 class NodeD(config: String) extends RpcMain(config) {
@@ -98,7 +99,7 @@ class NodeD(config: String) extends RpcMain(config) {
         println("-------------node d start----------")
     }
     def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(ClusterApi())
+        Vector(WorkerPool())
     }
 }
 

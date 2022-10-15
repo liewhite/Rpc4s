@@ -14,9 +14,11 @@ import scala.concurrent.ExecutionContext.Implicits.*
 import scala.concurrent.duration.*
 import io.github.liewhite.json.codec.*
 
-case class ResponseWithStatus[T](res:T, exit: Boolean = false)
+case class ResponseWithStatus[T](res: T, exit: Boolean = false)
 
-abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](name: String) {
+abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
+    name: String
+) {
     var callable: Boolean                         = false
     protected var callbackActor: ActorRef[String] = null
 
@@ -27,7 +29,7 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
     ] = scala.collection.concurrent.TrieMap
         .empty[String, (ZonedDateTime, Promise[Try[O]])]
 
-    protected def clientInit(ctx: ActorContext[_]) = {
+    def clientInit(ctx: ActorContext[_]): this.type = {
         this.synchronized {
             if (!callable) {
                 createCallbackActor(ctx)
@@ -45,11 +47,12 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
                 }
             }
         }
+        this
     }
 
     private def createCallbackActor(ctx: ActorContext[_]) = {
         val actorName = s"${name}_callback_${UUID.randomUUID().toString()}"
-        // ctx.log.info(s"creating callback actor ${actorName} " )
+        ctx.log.info(s"creating callback actor ${actorName} for $name")
         callbackActor = ctx.spawn(
           Behaviors.receive[String]((ctx, msg) => {
               ResponseWrapper.fromMsgString[O](ctx, msg) match {

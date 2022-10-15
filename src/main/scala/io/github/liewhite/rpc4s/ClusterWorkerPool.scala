@@ -20,14 +20,14 @@ import scala.util.Success
 abstract class ClusterWorkerPoolEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
     name: String,
     workerNum: Int,
-    role: String
+    role: String,
 ) extends ClusterEndpoint[I, O](name, role) {
     def tellWorker(
         ctx: ActorContext[_],
         i: I,
         customeRequestId: Option[String] = None
     ): Unit = {
-        tellWorkerJson(ctx,i.encode,customeRequestId)
+        tellWorkerJson(ctx, i.encode, customeRequestId)
     }
 
     def tellWorkerJson(
@@ -36,7 +36,7 @@ abstract class ClusterWorkerPoolEndpoint[I: ClassTag: Encoder: Decoder, O: Encod
         customeRequestId: Option[String] = None
     ): Unit = {
         val requestId = requestIdFromOption(customeRequestId)
-        val entityId = (i.hashCode() % workerNum).toString()
+        val entityId  = entityIdFromReq(i)
         val entity: EntityRef[String] =
             ClusterSharding(ctx.system).entityRefFor(typeKey, entityId)
         entity ! RequestWrapper(i, requestId, ctx.system.ignoreRef).toMsgString(ctx)
@@ -57,11 +57,14 @@ abstract class ClusterWorkerPoolEndpoint[I: ClassTag: Encoder: Decoder, O: Encod
         customeRequestId: Option[String] = None
     ): Future[Try[O]] = {
         clientInit(ctx)
-        val requestId = requestIdFromOption(customeRequestId)
-        val promise = prepareRequest(requestId,timeout)
-        val entityId = (i.hashCode() % workerNum).toString()
+        val requestId                 = requestIdFromOption(customeRequestId)
+        val promise                   = prepareRequest(requestId, timeout)
+        val entityId                  = entityIdFromReq(i)
         val entity: EntityRef[String] = ClusterSharding(ctx.system).entityRefFor(typeKey, entityId)
         entity ! RequestWrapper(i, requestId, callbackActor).toMsgString(ctx)
         promise.future
+    }
+    def entityIdFromReq(i: Object): String = {
+        (i.hashCode().abs % workerNum).toString()
     }
 }
