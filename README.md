@@ -7,59 +7,7 @@ libraryDependencies += "io.github.liewhite" %% "rpc4s" % "0.1.1"
 ```
 
 ## Code
-```scala
-import akka.actor.typed.ActorSystem
-import akka.actor.typed.scaladsl.Behaviors
-import com.typesafe.config.ConfigFactory
-import scala.concurrent.ExecutionContext.Implicits._
-import akka.actor.typed.scaladsl.ActorContext
-import io.github.liewhite.rpc4s.*
+[Example](https://github.com/liewhite/Rpc4s/blob/main/src/main/scala/io/github/liewhite/rpc4s/main.scala)
 
-case class Req(i: Int) extends TMessage
-case class Res(i: Int) extends TMessage
-
-class Service extends RpcMain {
-  override def init(ctx: ActorContext[_]): Unit = { 
-    // create a api endpoint
-    val api = Endpoint[Req, Res]("api1")
-    api.init(ctx)
-
-    // create a local endpoint
-    api.startLocal(
-      ctx,
-      (ctx, req) => {
-        println(s"receive local: $req")
-        Res(123)
-      }
-    )
-
-    // call local endpoint
-    api
-      .call(ctx, Req(1))
-      .map(item => println(s"----call response-----\n $item"))
-
-    // create a cluster endpoint
-    api.startCluster(
-      ctx,
-      (ctx, id, req) => {
-        println(s"receive cluster: $req")
-        Res(req.i)
-      }
-    )
-
-    // call the cluster endpoint
-    api
-      .callEntity(ctx, "1", Req(1))
-      .map(item => println(s"----call entity response-----\n $item"))
-
-    // async call
-    api.tell(ctx, Req(2))
-    api.tellEntity(ctx, "1", Req(2))
-  }
-}
-
-@main def main() = {
-    val s = Service()
-    s.start("application_rpc.conf")
-}
-```
+## 核心概念解释
+### Endpoint

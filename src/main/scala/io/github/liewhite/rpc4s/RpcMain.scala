@@ -43,8 +43,10 @@ abstract class RpcMain(
       )
     )
 
+    // 用户业务逻辑入口
     def init(ctx: ActorContext[_]): Unit
 
+    // 可能会在该node上创建的 cluster endpoint
     def clusterEndpoints(): Vector[ClusterEndpoint[_, _]]
 
     def shutdown() = {

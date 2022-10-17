@@ -16,10 +16,12 @@ import io.github.liewhite.json.codec.*
 
 case class ResponseWithStatus[T](res: T, exit: Boolean = false)
 
+val CallbackTerminateMsg = "Terminate"
+
 abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
     name: String
 ) {
-    var callable: Boolean                         = false
+    @volatile var callable: Boolean               = false
     protected var callbackActor: ActorRef[String] = null
 
     // 处理中的请求
@@ -35,7 +37,7 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
                 createCallbackActor(ctx)
                 callable = true
                 Future {
-                    while (true) {
+                    while (callable) {
                         val now      = ZonedDateTime.now()
                         val timeouts = requests.filter((_, item) => item._1.isBefore(now))
                         timeouts.foreach(item => {
@@ -44,10 +46,21 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
                         })
                         Thread.sleep(30000)
                     }
+                    ctx.log.info(s"callback future exit: $name")
                 }
             }
         }
         this
+    }
+
+    def shutdownClient(ctx: ActorContext[_]) = {
+        this.synchronized {
+            if (callable) {
+                ctx.log.info(s"shutting down client...$name")
+                callbackActor ! CallbackTerminateMsg
+                callable = false
+            }
+        }
     }
 
     private def createCallbackActor(ctx: ActorContext[_]) = {
@@ -56,13 +69,21 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
         callbackActor = ctx.spawn(
           Behaviors.receive[String]((ctx, msg) => {
               ResponseWrapper.fromMsgString[O](ctx, msg) match {
-                  case Left(value) => ctx.log.error("not json msg: {}", msg)
+                  case Left(value) => {
+                      if (msg == CallbackTerminateMsg) {
+                          ctx.log.info(s"callback actor exit: $actorName")
+                          Behaviors.stopped
+                      } else {
+                          ctx.log.error("not json msg: {}", msg)
+                          Behaviors.same
+                      }
+                  }
                   case Right(msg) => {
                       requests.get(msg.requestId).map(_._2.trySuccess(msg.response))
                       requests.remove(msg.requestId)
+                      Behaviors.same
                   }
               }
-              Behaviors.same
           }),
           actorName
         )

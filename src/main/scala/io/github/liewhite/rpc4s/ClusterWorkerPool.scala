@@ -56,7 +56,6 @@ abstract class ClusterWorkerPoolEndpoint[I: ClassTag: Encoder: Decoder, O: Encod
         timeout: Duration = 30.seconds,
         customeRequestId: Option[String] = None
     ): Future[Try[O]] = {
-        clientInit(ctx)
         val requestId                 = requestIdFromOption(customeRequestId)
         val promise                   = prepareRequest(requestId, timeout)
         val entityId                  = entityIdFromReq(i)
