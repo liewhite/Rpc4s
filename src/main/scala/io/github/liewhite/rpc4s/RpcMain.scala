@@ -23,17 +23,16 @@ abstract class RpcMain(
     configName: String = "conf/config.conf",
     clusterName: String = "RPC"
 ) {
-    val config = Map()
     val worker = ActorSystem(
       Behaviors
           .setup(ctx => {
               val noderoles = Cluster(ctx.system).selfMember.roles
               clusterEndpoints().foreach(ep => {
                   if (noderoles.contains(ep.role)) {
-                      ep.declareEntity(ctx)
+                      ep.declareEntity(ctx.system)
                   }
               })
-              init(ctx)
+              init(ctx.system)
               Behaviors.same
           }),
       clusterName,
@@ -44,7 +43,7 @@ abstract class RpcMain(
     )
 
     // 用户业务逻辑入口
-    def init(ctx: ActorContext[_]): Unit
+    def init(system: ActorSystem[_]): Unit
 
     // 可能会在该node上创建的 cluster endpoint
     def clusterEndpoints(): Vector[ClusterEndpoint[_, _]]
