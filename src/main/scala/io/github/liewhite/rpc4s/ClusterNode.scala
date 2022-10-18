@@ -19,7 +19,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.config.ConfigParseOptions
 import java.io.File
 
-abstract class RpcMain(
+abstract class ClusterNode(
     configName: String = "conf/config.conf",
     clusterName: String = "RPC"
 ) {

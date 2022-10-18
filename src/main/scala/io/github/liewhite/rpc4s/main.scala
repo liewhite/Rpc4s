@@ -58,7 +58,7 @@ class LocalApi() extends LocalEndpoint[Req, Res]("local-api-1") {
 }
 
 // 所有请求都从
-class NodeB(config: String) extends RpcMain(config) {
+class NodeB(config: String) extends ClusterNode(config) {
     override def init(system: ActorSystem[?]): Unit = {
         val api     = Api()
         val workers = WorkerPool()
@@ -95,7 +95,7 @@ class NodeB(config: String) extends RpcMain(config) {
     }
 }
 
-class NodeA(config: String) extends RpcMain(config) {
+class NodeA(config: String) extends ClusterNode(config) {
 
     override def init(system: ActorSystem[?]): Unit = {}
 
@@ -104,7 +104,7 @@ class NodeA(config: String) extends RpcMain(config) {
     }
 }
 
-class NodeC(config: String) extends RpcMain(config) {
+class NodeC(config: String) extends ClusterNode(config) {
     override def init(system: ActorSystem[_]): Unit = {
         println("-------------node c start----------")
     }
@@ -112,7 +112,7 @@ class NodeC(config: String) extends RpcMain(config) {
         Vector(Api(), WorkerPool())
     }
 }
-class NodeD(config: String) extends RpcMain(config) {
+class NodeD(config: String) extends ClusterNode(config) {
     override def init(system: ActorSystem[_]): Unit = {
         println("-------------node d start----------")
     }
