@@ -22,7 +22,7 @@ import cats.syntax.validated
 abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
     name: String,
     val role: String
-) extends AbstractEndpoint(name) {
+) extends AbstractEndpoint[I,O](name) {
     val typeKey = EntityTypeKey[String](name)
 
     def declareEntity(system: ActorSystem[_]) = {
@@ -42,10 +42,10 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
                                   .decode[I]
                                   .map(i =>
                                       Try(
-                                        clusterHandle(
+                                        handler(
                                           system,
-                                          entityContext.entityId,
-                                          i
+                                          i,
+                                          Some(entityContext.entityId),
                                         )
                                       )
                                   )
@@ -150,10 +150,5 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
         declareEntity(system)
     }
 
-    def clusterHandle(
-        ctx: ActorSystem[_],
-        entityId: String,
-        i: I
-    ): ResponseWithStatus[O]
 
 }

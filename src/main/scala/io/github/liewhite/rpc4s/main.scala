@@ -11,28 +11,22 @@ import com.typesafe.config.ConfigParseOptions
 import io.github.liewhite.json.JsonBehavior.*
 import io.github.liewhite.json.codec.*
 
-
 case class Req(i: Int) derives Encoder, Decoder
 case class Res(i: Int)
 
 class Api extends ClusterEndpoint[Req, Res]("api", "api") {
-    def clusterHandle(ctx: ActorSystem[?], entityId: String, i: Req): ResponseWithStatus[Res] = {
+    def handler(ctx: ActorSystem[?], i: Req, entityId: Option[String]): ResponseWithStatus[Res] = {
         ResponseWithStatus[Res](Res(i.i))
     }
 
 }
 
-// // 集群worker api, 可以从集群任意节点上访问, 无需指定实体id， 所有实体逻辑相同
-// class WorkerPool() extends ClusterWorkerPoolEndpoint[Req, Res]("cluster-worker-1", 3, "api") {
-//     override def clusterHandle(
-//         ctx: ActorContext[_],
-//         entityId: String,
-//         i: Req
-//     ): ResponseWithStatus[Res] = {
-//         ctx.log.info(s"worker receive cluster: $i, ${entityId} node: ${ctx.system.address}")
-//         ResponseWithStatus(Res(i.i), false)
-//     }
-// }
+// 集群worker api, 可以从集群任意节点上访问, 无需指定实体id， 所有实体逻辑相同
+class WorkerPool() extends ClusterWorkerPoolEndpoint[Req, Res]("cluster-worker-1", 30, "api") {
+    def handler(ctx: ActorSystem[?], i: Req, entityId: Option[String]): ResponseWithStatus[Res] = {
+        ResponseWithStatus[Res](Res(i.i))
+    }
+}
 
 // // 本地api, 一般只在节点内访问
 // class LocalApi() extends LocalEndpoint[Req, Res]("local-api-1") {
@@ -51,15 +45,21 @@ class Api extends ClusterEndpoint[Req, Res]("api", "api") {
 class NodeB(config: String) extends RpcMain(config) {
     override def init(system: ActorSystem[?]): Unit = {
         val api = Api()
+        val workers = WorkerPool()
         Future {
             Thread.sleep(3000)
-            Range(1, 3).foreach(i => {
-                api.call(system,i.toString(), Req(i))
+            Range(1, 10).foreach(i => {
+                workers.call(system, i.toString(), Req(i))
+                    .map(item => println(s"----call pool response-----\n $item"))
+                api.call(system, i.toString(), Req(i))
                     .map(item => println(s"----call entity response-----\n $item"))
                 Thread.sleep(1000)
             })
-            Range(1, 3).foreach(i => {
-                api.callJson(system,i.toString(), Req(i).encode)
+            println(system.printTree)
+            Range(1, 100).foreach(i => {
+                workers.callJson(system, i.toString(), Req(i).encode)
+                    .map(item => println(s"----call pool response-----\n $item"))
+                api.callJson(system, i.toString(), Req(i).encode)
                     .map(item => println(s"----call entity response-----\n $item"))
                 Thread.sleep(1000)
             })
@@ -67,7 +67,7 @@ class NodeB(config: String) extends RpcMain(config) {
     }
 
     def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(Api())
+        Vector(Api(), WorkerPool())
     }
 }
 
@@ -76,7 +76,7 @@ class NodeA(config: String) extends RpcMain(config) {
     override def init(system: ActorSystem[?]): Unit = {}
 
     def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(Api())
+        Vector(Api(), WorkerPool())
     }
 }
 
@@ -85,7 +85,7 @@ class NodeC(config: String) extends RpcMain(config) {
         println("-------------node c start----------")
     }
     def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(Api())
+        Vector(Api(), WorkerPool())
     }
 }
 class NodeD(config: String) extends RpcMain(config) {
@@ -93,7 +93,7 @@ class NodeD(config: String) extends RpcMain(config) {
         println("-------------node d start----------")
     }
     def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(Api())
+        Vector(Api(), WorkerPool())
     }
 }
 

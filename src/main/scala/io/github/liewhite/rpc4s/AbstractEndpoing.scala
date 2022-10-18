@@ -20,9 +20,15 @@ case object Exit extends EndpointStatus
 
 case class ResponseWithStatus[T](res: T, status: EndpointStatus = Same)
 
-abstract class AbstractEndpoint(
+abstract class AbstractEndpoint[I,O](
     val name: String
 ) {
+    def handler(
+        ctx: ActorSystem[_],
+        i: I,
+        entityId: Option[String],
+    ): ResponseWithStatus[O]
+
     // implement by subclass
     def listen(system: ActorSystem[_]): Unit
 }
