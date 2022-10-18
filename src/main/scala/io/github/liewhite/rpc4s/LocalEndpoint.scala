@@ -53,7 +53,6 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
         system: ActorSystem[_],
         i: Json,
         timeout: Duration = 30.seconds,
-        customeRequestId: Option[String] = None
     ): Future[O] = {
         implicit val syst: ActorSystem[_] = system
         implicit val t: Timeout           = timeout.toSeconds.second

@@ -19,7 +19,7 @@ import scala.util.Success
 
 abstract class ClusterWorkerPoolEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
     name: String,
-    workerNum: Int,
+    maxPoolSize: Int,
     role: String,
 ) extends ClusterEndpoint[I, O](name, role) {
 
@@ -59,6 +59,6 @@ abstract class ClusterWorkerPoolEndpoint[I: ClassTag: Encoder: Decoder, O: Encod
     }
 
     def entityIdFromReq(i: Object): String = {
-        (i.hashCode().abs % workerNum).toString()
+        (i.hashCode().abs % maxPoolSize).toString()
     }
 }
