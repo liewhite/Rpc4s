@@ -13,6 +13,8 @@ import akka.cluster.sharding.typed.scaladsl.*
 import scala.concurrent.ExecutionContext.Implicits.*
 import scala.concurrent.duration.*
 import io.github.liewhite.json.codec.*
+import io.github.liewhite.json.JsonBehavior.*
+import scala.util.*
 
 sealed trait EndpointStatus
 case object Same extends EndpointStatus
@@ -20,15 +22,92 @@ case object Exit extends EndpointStatus
 
 case class ResponseWithStatus[T](res: T, status: EndpointStatus = Same)
 
-abstract class AbstractEndpoint[I,O](
+abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
     val name: String
 ) {
     def handler(
-        ctx: ActorSystem[_],
+        system: ActorSystem[_],
         i: I,
-        entityId: Option[String],
+        entityId: Option[String]
     ): ResponseWithStatus[O]
 
     // implement by subclass
     def listen(system: ActorSystem[_]): Unit
+
+    protected def handlerBehavior(system: ActorSystem[_]) = {
+        Behaviors.receive[String]((ctx, msg) => {
+            val req = RequestWrapper.fromMsgString(system, msg)
+            req match
+                case Left(value) => {
+                    ctx.log.error(s"failed parse request msg: $value")
+                    Behaviors.same
+                }
+                case Right(request) => {
+                    val result = request.msg
+                        .decode[I]
+                        .map(i =>
+                            Try(
+                              handler(
+                                system,
+                                i,
+                                None
+                              )
+                            )
+                        )
+                    result match {
+                        case Left(e) => {
+                            ctx.log.error(
+                              s"failed parse request for local endpoint: $name , ${request.msg}"
+                            )
+                            Behaviors.same
+                        }
+                        case Right(o) => {
+                            o match {
+                                case Failure(exception) => {
+                                    ctx.log.error(s"exec handler result error $exception")
+                                    Behaviors.same
+                                }
+                                case Success(ResponseWithStatus(res, status)) => {
+                                    status match {
+                                        case Exit => {
+                                            ctx.log.info(
+                                              s"local endpoint receive exit: $name"
+                                            )
+                                            Behaviors.stopped
+                                        }
+                                        case Same => {
+                                            request.replyTo ! ResponseWrapper(
+                                              Try(res).encode
+                                            ).toMsgString()
+                                            Behaviors.same
+
+                                        }
+                                    }
+                                }
+                            }
+
+                        }
+                    }
+                }
+        })
+    }
+    def responseFromStringFuture(system: ActorSystem[_],result: Future[String], endpointName: String): Future[O] = {
+        result.map(r => {
+            ResponseWrapper.fromMsgString(system, r) match {
+                case Left(value) =>
+                    throw Exception(s"failed parse local actor response ${name}: ${r}")
+                case Right(value) =>
+                    value.response.decode[Try[O]] match {
+                        case Left(err) => throw err
+                        case Right(ok) => {
+                            ok match {
+                                case Failure(exception) => throw exception
+                                case Success(value)     => value
+                            }
+                        }
+                    }
+            }
+        })
+
+    }
 }

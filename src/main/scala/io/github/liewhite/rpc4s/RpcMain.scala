@@ -29,7 +29,7 @@ abstract class RpcMain(
               val noderoles = Cluster(ctx.system).selfMember.roles
               clusterEndpoints().foreach(ep => {
                   if (noderoles.contains(ep.role)) {
-                      ep.declareEntity(ctx.system)
+                      ep.listen(ctx.system)
                   }
               })
               init(ctx.system)
