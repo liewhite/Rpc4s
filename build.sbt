@@ -1,4 +1,4 @@
-val AkkaVersion     = "2.6.20"
+val AkkaVersion     = "2.7.0"
 // val AkkaHttpVersion = "10.2.10"
 ThisBuild / organization           := "io.github.liewhite"
 ThisBuild / organizationName       := "liewhite"

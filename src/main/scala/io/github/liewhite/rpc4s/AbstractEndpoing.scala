@@ -68,17 +68,17 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
                                     Behaviors.same
                                 }
                                 case Success(ResponseWithStatus(res, status)) => {
+                                    request.replyTo ! ResponseWrapper(
+                                      Try(res).encode
+                                    ).toMsgString()
                                     status match {
                                         case Exit => {
                                             ctx.log.info(
-                                              s"local endpoint receive exit: $name"
+                                              s"endpoint exit: $name"
                                             )
                                             Behaviors.stopped
                                         }
                                         case Same => {
-                                            request.replyTo ! ResponseWrapper(
-                                              Try(res).encode
-                                            ).toMsgString()
                                             Behaviors.same
 
                                         }
@@ -91,7 +91,11 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
                 }
         })
     }
-    def responseFromStringFuture(system: ActorSystem[_],result: Future[String], endpointName: String): Future[O] = {
+    def responseFromStringFuture(
+        system: ActorSystem[_],
+        result: Future[String],
+        endpointName: String
+    ): Future[O] = {
         result.map(r => {
             ResponseWrapper.fromMsgString(system, r) match {
                 case Left(value) =>

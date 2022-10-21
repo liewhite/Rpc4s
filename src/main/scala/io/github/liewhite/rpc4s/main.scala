@@ -57,7 +57,6 @@ class LocalApi() extends LocalEndpoint[Req, Res]("local-api-1") {
 
 }
 
-// 所有请求都从
 class NodeB(config: String) extends ClusterNode(config) {
     override def init(system: ActorSystem[?]): Unit = {
         val api     = Api()
