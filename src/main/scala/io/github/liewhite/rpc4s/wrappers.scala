@@ -10,7 +10,7 @@ import io.github.liewhite.json.codec.*
 
 case class RequestWrapper(
     msg: Json,
-    replyTo: ActorRef[String]
+    replyTo: ActorRef[String],
 ) {
     def toMsgString(system: ActorSystem[_]): String = {
         val actorRefResolver = ActorRefResolver(system)
