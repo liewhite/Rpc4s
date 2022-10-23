@@ -128,4 +128,5 @@ class NodeD(config: String) extends ClusterNode(config) {
     val c = NodeC("conf/c.conf")
     val d = NodeD("conf/d.conf")
     val b = NodeB("conf/b.conf")
+    Thread.sleep(100000)
 }

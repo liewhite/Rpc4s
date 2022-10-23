@@ -3,6 +3,7 @@ package io.github.liewhite.rpc4s
 import java.time.ZonedDateTime
 import java.util.UUID
 
+import scala.jdk.CollectionConverters.*
 import scala.concurrent.{Promise, Future}
 import scala.reflect.ClassTag
 import scala.util.Try
@@ -39,7 +40,7 @@ abstract class ClusterNode(
       ConfigFactory.parseFile(
         File(configName),
         ConfigParseOptions.defaults().setSyntaxFromFilename(configName)
-      )
+      ).withFallback(ConfigFactory.parseMap(Map("akka.remote.artery.canonical.hostname" -> sys.env.getOrElse("IP","")).asJava))
     )
 
     // 用户业务逻辑入口
