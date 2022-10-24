@@ -18,10 +18,11 @@ import scala.util.Failure
 import scala.util.Success
 
 abstract class ClusterWorkerPoolEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
+    system: ActorSystem[?],
     name: String,
     maxPoolSize: Int,
     role: String,
-) extends ClusterEndpoint[I, O](name, role) {
+) extends ClusterEndpoint[I, O](system, name, role) {
 
     def tellWorker(
         system: ActorSystem[_],

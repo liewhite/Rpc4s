@@ -23,16 +23,13 @@ case object Exit extends EndpointStatus
 case class ResponseWithStatus[T](res: T, status: EndpointStatus = Same)
 
 abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
-    val name: String
+    val system: ActorSystem[?],
+    val name: String,
 ) {
     def handler(
-        system: ActorSystem[_],
         i: I,
         entityId: Option[String]
     ): ResponseWithStatus[O]
-
-    // implement by subclass
-    def listen(system: ActorSystem[_]): Unit
 
     protected def handlerBehavior(system: ActorSystem[_]) = {
         Behaviors.receive[String]((ctx, msg) => {
@@ -48,7 +45,6 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
                         .map(i =>
                             Try(
                               handler(
-                                system,
                                 i,
                                 None
                               )

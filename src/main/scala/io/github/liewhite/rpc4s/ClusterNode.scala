@@ -42,41 +42,18 @@ abstract class ClusterNode(
     val config: ClusterConfig = ClusterConfig()
 ) {
     var worker: ActorSystem[?] = null
-
     def listen() = {
         val conf = defaultConfig.withFallback(config.toConfig)
         logger.info(s"node config: $conf")
         worker = ActorSystem(
           Behaviors
               .setup(ctx => {
-                  declareEndpoints(ctx.system)
-                  init(ctx.system)
+                  entryPoint(ctx.system)
                   Behaviors.same
               }),
           "RPC",
           conf
         )
-    }
-
-    // 初始化endpoints
-    def declareEndpoints(system: ActorSystem[?], declaredRole: Set[String] = Set.empty): Unit = {
-        val cluster = Cluster(system)
-        // val noderoles = cluster.selfMember.roles
-        if (!declaredRole.contains(config.role)) {
-            serveEndpoints().map(ep => {
-                logger.info(s"declare serve endpoint on node ${cluster.selfMember.uniqueAddress}")
-                ep.init(system)
-            })
-            involveEndpoints().map(ep => {
-                logger.info(s"declare involve endpoint on node ${cluster.selfMember.uniqueAddress}")
-                ep.init(system)
-                ep.typeKey.name
-            })
-            involveNode().foreach(node => {
-                logger.info(s"declare dependent node's endpoints: ${config.role} -> ${node.config.role} ")
-                node.declareEndpoints(system, declaredRole + config.role)
-            })
-        }
     }
 
     def defaultConfig: Config = {
@@ -90,17 +67,12 @@ abstract class ClusterNode(
     }
 
     // 用户业务逻辑入口
-    def init(system: ActorSystem[_]): Unit
-
-    def serveEndpoints(): Vector[ClusterEndpoint[_, _]] = Vector.empty
-    // 可能会调用哪些endpoint
-    def involveEndpoints(): Vector[ClusterEndpoint[_, _]] = Vector.empty
-    // 或者直接声明依赖服务
-    // 不允许出现环
-    def involveNode(): Vector[ClusterNode] = Vector.empty
+    def entryPoint(system: ActorSystem[_]): Unit
 
     def shutdown() = {
-        worker.terminate()
+        if(worker != null) {
+            worker.terminate()
+        }
     }
 
 }

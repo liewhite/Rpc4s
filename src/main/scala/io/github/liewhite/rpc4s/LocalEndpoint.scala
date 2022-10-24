@@ -21,8 +21,9 @@ import akka.actor.typed.scaladsl.AskPattern._
 
 // Local endpoint 创建出来大概率是要调用的
 abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
+    system: ActorSystem[?],
     name: String
-) extends AbstractEndpoint[I, O](name) {
+) extends AbstractEndpoint[I, O](system,name) {
     private var local: ActorRef[String] = null
     private var init: Boolean           = false
 

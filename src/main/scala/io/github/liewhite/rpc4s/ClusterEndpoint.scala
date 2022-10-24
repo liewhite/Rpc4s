@@ -20,21 +20,23 @@ import akka.util.Timeout
 import cats.syntax.validated
 
 abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder](
+    system: ActorSystem[?],
     name: String,
-    val role: String
-) extends AbstractEndpoint[I, O](name) {
+    val role: String,
+) extends AbstractEndpoint[I, O](system,name) {
     val typeKey = EntityTypeKey[String](name)
 
-    def listen(system: ActorSystem[_]): Unit = {
-        init(system)
-    }
+    // todo 测试幂等性
+    ClusterSharding(system).init(
+        Entity(typeKey)(createBehavior = entityContext => handlerBehavior(system)).withRole(role)
+    )
 
-    def init(system: ActorSystem[_]): Unit = {
-        logger.info(s"sharding init ${typeKey} on ${system.address}")
-        val shardRegion = ClusterSharding(system).init(
-          Entity(typeKey)(createBehavior = entityContext => handlerBehavior(system)).withRole(role)
-        )
-    }
+    // def listen(system: ActorSystem[_]): Unit = {
+    //     logger.info(s"sharding init ${typeKey} on ${system.address}")
+    //     ClusterSharding(system).init(
+    //       Entity(typeKey)(createBehavior = entityContext => handlerBehavior(system)).withRole(role)
+    //     )
+    // }
 
     def tell(
         system: ActorSystem[_],

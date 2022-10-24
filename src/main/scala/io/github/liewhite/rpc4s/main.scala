@@ -16,9 +16,9 @@ import io.circe.Json
 case class Req(i: Int) derives Encoder, Decoder
 case class Res(i: Int)
 
-class Api extends ClusterEndpoint[Req, Res]("api", "api") {
-    def handler(ctx: ActorSystem[?], i: Req, entityId: Option[String]): ResponseWithStatus[Res] = {
-        ctx.log.info(s"node ${ctx.address} receive ${i.i}")
+class Api(system: ActorSystem[?]) extends ClusterEndpoint[Req, Res](system, "api", "api") {
+    def handler(i: Req, entityId: Option[String]): ResponseWithStatus[Res] = {
+        logger.info(s"node ${system.address} receive ${i.i}")
         if (i.i == 0) {
             ResponseWithStatus[Res](Res(i.i), status = Exit)
         } else {
@@ -29,8 +29,9 @@ class Api extends ClusterEndpoint[Req, Res]("api", "api") {
 }
 
 // 集群worker api, 可以从集群任意节点上访问, 无需指定实体id， 所有实体逻辑相同
-class WorkerPool() extends ClusterWorkerPoolEndpoint[Req, Res]("cluster-worker-1", 30, "api") {
-    def handler(ctx: ActorSystem[?], i: Req, entityId: Option[String]): ResponseWithStatus[Res] = {
+class WorkerPool(system: ActorSystem[?])
+    extends ClusterWorkerPoolEndpoint[Req, Res](system, "cluster-worker-1", 30, "api") {
+    def handler(i: Req, entityId: Option[String]): ResponseWithStatus[Res] = {
         if (i.i == 0) {
             ResponseWithStatus[Res](Res(i.i), status = Exit)
         } else {
@@ -41,10 +42,9 @@ class WorkerPool() extends ClusterWorkerPoolEndpoint[Req, Res]("cluster-worker-1
 }
 
 // 本地api, 一般只在节点内访问
-class LocalApi() extends LocalEndpoint[Req, Res]("local-api-1") {
+class LocalApi(system: ActorSystem[?]) extends LocalEndpoint[Req, Res](system, "local-api-1") {
 
     def handler(
-        system: ActorSystem[?],
         i: Req,
         entityId: Option[String]
     ): ResponseWithStatus[Res] = {
@@ -58,9 +58,9 @@ class LocalApi() extends LocalEndpoint[Req, Res]("local-api-1") {
 
 }
 
-class NodeB extends ClusterNode(ClusterConfig(port = 2551)) {
-    override def init(system: ActorSystem[?]): Unit = {
-        val api     = Api()
+class NodeB extends ClusterNode(ClusterConfig(port = 2551, role="b")) {
+    def entryPoint(system: ActorSystem[_]): Unit = {
+        val api = Api(system)
         // val workers = WorkerPool()
         // val local   = LocalApi()
         Future {
@@ -94,32 +94,20 @@ class NodeB extends ClusterNode(ClusterConfig(port = 2551)) {
             Thread.sleep(1000)
         }.onComplete(println(_))
     }
-
-    override def involveEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(Api(), WorkerPool())
-    }
 }
 
-class NodeA extends ClusterNode(ClusterConfig(port = 2552)) {
+class NodeA extends ClusterNode(ClusterConfig(port = 2552, role = "a")) {
 
-    override def init(system: ActorSystem[?]): Unit = {}
-
-    override def serveEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(Api(), WorkerPool())
-    }
-    override def involveEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(Api(), WorkerPool())
-    }
+    def entryPoint(system: ActorSystem[_]): Unit = {}
 }
 
-class NodeC extends ClusterNode(ClusterConfig(port = 2553)) {
-    override def init(system: ActorSystem[_]): Unit = {}
+class NodeC extends ClusterNode(ClusterConfig(port = 2553, role = "c")) {
+    def entryPoint(system: ActorSystem[_]): Unit = {}
 }
 
-class NodeD extends ClusterNode(ClusterConfig(port = 2554, role= "api")) {
-    override def init(system: ActorSystem[_]): Unit = {}
-    override def serveEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(Api(), WorkerPool())
+class NodeD extends ClusterNode(ClusterConfig(port = 2554, role = "api")) {
+    def entryPoint(system: ActorSystem[_]): Unit = {
+        Api(system)
     }
 }
 
