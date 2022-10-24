@@ -31,7 +31,7 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
         entityId: Option[String]
     ): ResponseWithStatus[O]
 
-    protected def handlerBehavior(system: ActorSystem[_]) = {
+    protected def handlerBehavior() = {
         Behaviors.receive[String]((ctx, msg) => {
             val req = RequestWrapper.fromMsgString(system, msg)
             req match
@@ -88,7 +88,6 @@ abstract class AbstractEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decod
         })
     }
     def responseFromStringFuture(
-        system: ActorSystem[_],
         result: Future[String],
         endpointName: String
     ): Future[O] = {

@@ -28,30 +28,26 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
     private var init: Boolean           = false
 
     def tellJson(
-        system: ActorSystem[_],
         i: Json
     ): Unit = {
         local ! RequestWrapper(i, system.ignoreRef).toMsgString(system)
     }
 
     def tell(
-        system: ActorSystem[_],
         i: I
     ): Unit = {
-        tellJson(system, i.encode)
+        tellJson(i.encode)
     }
 
     def call(
-        system: ActorSystem[_],
         i: I,
         timeout: Duration = 30.seconds
     ): Future[O] = {
-        callJson(system, i.encode, timeout)
+        callJson(i.encode, timeout)
     }
 
     // 幂等请求需要用户提供request id
     def callJson(
-        system: ActorSystem[_],
         i: Json,
         timeout: Duration = 30.seconds,
     ): Future[O] = {
@@ -60,15 +56,14 @@ abstract class LocalEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decoder]
 
         val result = local
             .ask[String](ref => RequestWrapper(i, ref).toMsgString(system))(t, system.scheduler)
-        responseFromStringFuture(system, result, name)
+        responseFromStringFuture(result, name)
     }
 
     def listen(
-        system: ActorSystem[_]
     ): Unit = {
         this.synchronized {
             if (!init) {
-                local = system.systemActorOf(handlerBehavior(system), name)
+                local = system.systemActorOf(handlerBehavior(), name)
                 init = true
             }
         }

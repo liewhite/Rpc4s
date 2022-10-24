@@ -28,15 +28,8 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
 
     // todo 测试幂等性
     ClusterSharding(system).init(
-        Entity(typeKey)(createBehavior = entityContext => handlerBehavior(system)).withRole(role)
+        Entity(typeKey)(createBehavior = entityContext => handlerBehavior()).withRole(role)
     )
-
-    // def listen(system: ActorSystem[_]): Unit = {
-    //     logger.info(s"sharding init ${typeKey} on ${system.address}")
-    //     ClusterSharding(system).init(
-    //       Entity(typeKey)(createBehavior = entityContext => handlerBehavior(system)).withRole(role)
-    //     )
-    // }
 
     def tell(
         entityId: String,
@@ -64,7 +57,7 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
 
         val entity: EntityRef[String] = ClusterSharding(system).entityRefFor(typeKey, entityId)
         val result = entity.ask[String](ref => RequestWrapper(i, ref).toMsgString(system))(t)
-        responseFromStringFuture(system, result, s"${typeKey}-${entityId}")
+        responseFromStringFuture(result, s"${typeKey}-${entityId}")
     }
 
     // 幂等请求需要用户提供request id

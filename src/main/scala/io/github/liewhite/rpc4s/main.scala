@@ -62,7 +62,7 @@ class NodeB extends ClusterNode(ClusterConfig(port = 2551, role="b")) {
     def entryPoint(system: ActorSystem[_]): Unit = {
         val api = Api(system)
         // val workers = WorkerPool()
-        // val local   = LocalApi()
+        val local   = LocalApi(system)
         Future {
             // val p = new ClusterEndpoint[Json,Json]("api","api") {
             //     def handler(system: ActorSystem[?], i: Json, entityId: Option[String]): ResponseWithStatus[Json] = ???
