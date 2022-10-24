@@ -25,15 +25,13 @@ abstract class ClusterWorkerPoolEndpoint[I: ClassTag: Encoder: Decoder, O: Encod
 ) extends ClusterEndpoint[I, O](system, name, role) {
 
     def tellWorker(
-        system: ActorSystem[_],
         i: I,
         customeRequestId: Option[String] = None
     ): Unit = {
-        tellWorkerJson(system, i.encode, customeRequestId)
+        tellWorkerJson(i.encode, customeRequestId)
     }
 
     def tellWorkerJson(
-        system: ActorSystem[_],
         i: Json,
         customeRequestId: Option[String] = None
     ): Unit = {
@@ -43,20 +41,18 @@ abstract class ClusterWorkerPoolEndpoint[I: ClassTag: Encoder: Decoder, O: Encod
         entity ! RequestWrapper(i, system.ignoreRef).toMsgString(system)
     }
     def callWorker(
-        system: ActorSystem[_],
         i: I,
         timeout: Duration = 30.seconds,
     ): Future[O] = {
-        callWorkerJson(system, i.encode, timeout)
+        callWorkerJson(i.encode, timeout)
     }
 
     def callWorkerJson(
-        system: ActorSystem[_],
         i: Json,
         timeout: Duration = 30.seconds,
     ): Future[O] = {
         val entityId                  = entityIdFromReq(i)
-        callJson(system, entityId, i, timeout)
+        callJson(entityId, i, timeout)
     }
 
     def entityIdFromReq(i: Object): String = {

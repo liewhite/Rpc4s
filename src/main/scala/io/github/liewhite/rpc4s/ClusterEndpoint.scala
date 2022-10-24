@@ -39,15 +39,13 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
     // }
 
     def tell(
-        system: ActorSystem[_],
         entityId: String,
         i: I
     ): Unit = {
-        tellJson(system, entityId, i.encode)
+        tellJson(entityId, i.encode)
     }
 
     def tellJson(
-        system: ActorSystem[_],
         entityId: String,
         i: Json
     ): Unit = {
@@ -57,7 +55,6 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
     }
 
     def callJson(
-        system: ActorSystem[_],
         entityId: String,
         i: Json,
         timeout: Duration = 30.seconds
@@ -72,12 +69,11 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
 
     // 幂等请求需要用户提供request id
     def call(
-        system: ActorSystem[_],
         entityId: String,
         i: I,
         timeout: Duration = 30.seconds
     ): Future[O] = {
-        callJson(system, entityId, i.encode, timeout)
+        callJson(entityId, i.encode, timeout)
     }
 
 }

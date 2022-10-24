@@ -72,7 +72,7 @@ class NodeB extends ClusterNode(ClusterConfig(port = 2551, role="b")) {
             Thread.sleep(3000)
             // local.listen(system)
             Range(1, 10).foreach(i => {
-                api.call(system, "${user_id}", Req(i))
+                api.call("${user_id}", Req(i))
                     .map(item => println(s"----call entity response-----\n $item"))
                 // workers
                 //     .callWorker(system, Req(i))
