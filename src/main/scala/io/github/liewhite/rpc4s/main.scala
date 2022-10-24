@@ -58,75 +58,75 @@ class LocalApi() extends LocalEndpoint[Req, Res]("local-api-1") {
 
 }
 
-class NodeB(config: String) extends ClusterNode(config) {
+class NodeB extends ClusterNode(ClusterConfig(port = 2551)) {
     override def init(system: ActorSystem[?]): Unit = {
         val api     = Api()
-        val workers = WorkerPool()
-        val local   = LocalApi()
+        // val workers = WorkerPool()
+        // val local   = LocalApi()
         Future {
-            val p = new ClusterEndpoint[Json,Json]("api","api") {
-                def handler(system: ActorSystem[?], i: Json, entityId: Option[String]): ResponseWithStatus[Json] = ???
-            }
-            p.call(system, "id", Req(100).encode).map(i => println("--------------------------------------ssssssssssssssssssssssssss"))
+            // val p = new ClusterEndpoint[Json,Json]("api","api") {
+            //     def handler(system: ActorSystem[?], i: Json, entityId: Option[String]): ResponseWithStatus[Json] = ???
+            // }
+            // p.call(system, "id", Req(100).encode).map(i => println("--------------------------------------ssssssssssssssssssssssssss"))
 
             Thread.sleep(3000)
-            local.listen(system)
+            // local.listen(system)
             Range(1, 10).foreach(i => {
-                workers
-                    .callWorker(system, Req(i))
-                    .map(item => println(s"----call pool response-----\n $item"))
                 api.call(system, "${user_id}", Req(i))
                     .map(item => println(s"----call entity response-----\n $item"))
-                local
-                    .call(system, Req(i))
-                    .map(item => println(s"----call entity response-----\n $item"))
+                // workers
+                //     .callWorker(system, Req(i))
+                //     .map(item => println(s"----call pool response-----\n $item"))
+                // local
+                //     .call(system, Req(i))
+                //     .map(item => println(s"----call entity response-----\n $item"))
 
                 Thread.sleep(1000)
             })
-            workers
-                .callWorkerJson(system, Req(0).encode)
-                .map(item => println(s"----call pool response-----\n $item"))
-            api.callJson(system, 0.toString(), Req(0).encode)
-                .map(item => println(s"----call entity response-----\n $item"))
-            local
-                .call(system, Req(0))
-                .map(item => println(s"----call entity response-----\n $item"))
+            // workers
+            //     .callWorkerJson(system, Req(0).encode)
+            //     .map(item => println(s"----call pool response-----\n $item"))
+            // api.callJson(system, 0.toString(), Req(0).encode)
+            //     .map(item => println(s"----call entity response-----\n $item"))
+            // local
+            //     .call(system, Req(0))
+            //     .map(item => println(s"----call entity response-----\n $item"))
             Thread.sleep(1000)
-        }
+        }.onComplete(println(_))
     }
 
-    def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
+    override def involveEndpoints(): Vector[ClusterEndpoint[_, _]] = {
         Vector(Api(), WorkerPool())
     }
 }
 
-class NodeA(config: String) extends ClusterNode(config) {
+class NodeA extends ClusterNode(ClusterConfig(port = 2552)) {
 
     override def init(system: ActorSystem[?]): Unit = {}
 
-    def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
+    override def serveEndpoints(): Vector[ClusterEndpoint[_, _]] = {
+        Vector(Api(), WorkerPool())
+    }
+    override def involveEndpoints(): Vector[ClusterEndpoint[_, _]] = {
         Vector(Api(), WorkerPool())
     }
 }
 
-class NodeC(config: String) extends ClusterNode(config) {
+class NodeC extends ClusterNode(ClusterConfig(port = 2553)) {
     override def init(system: ActorSystem[_]): Unit = {}
-    def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
-        Vector(Api(), WorkerPool())
-    }
 }
 
-class NodeD(config: String) extends ClusterNode(config) {
+class NodeD extends ClusterNode(ClusterConfig(port = 2554, roles= Vector("api"))) {
     override def init(system: ActorSystem[_]): Unit = {}
-    def clusterEndpoints(): Vector[ClusterEndpoint[_, _]] = {
+    override def serveEndpoints(): Vector[ClusterEndpoint[_, _]] = {
         Vector(Api(), WorkerPool())
     }
 }
 
 @main def main = {
-    val a = NodeA("conf/a.conf")
-    val c = NodeC("conf/c.conf")
-    val d = NodeD("conf/d.conf")
-    val b = NodeB("conf/b.conf")
+    val a = NodeA().listen()
+    val c = NodeC().listen()
+    val d = NodeD().listen()
+    val b = NodeB().listen()
     Thread.sleep(100000)
 }

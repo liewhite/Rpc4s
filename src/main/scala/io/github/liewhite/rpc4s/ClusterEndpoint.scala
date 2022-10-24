@@ -26,6 +26,10 @@ abstract class ClusterEndpoint[I: ClassTag: Encoder: Decoder, O: Encoder: Decode
     val typeKey = EntityTypeKey[String](name)
 
     def listen(system: ActorSystem[_]): Unit = {
+        init(system)
+    }
+
+    def init(system: ActorSystem[_]): Unit = {
         logger.info(s"sharding init ${typeKey} on ${system.address}")
         ClusterSharding(system).init(
           Entity(typeKey)(createBehavior = entityContext => handlerBehavior(system)).withRole(role)

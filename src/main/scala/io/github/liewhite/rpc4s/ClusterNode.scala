@@ -19,35 +19,71 @@ import akka.cluster.sharding.typed.scaladsl.*
 import com.typesafe.config.ConfigFactory
 import com.typesafe.config.ConfigParseOptions
 import java.io.File
+import com.typesafe.config.Config
 
-abstract class ClusterNode(
-    configName: String = "conf/config.conf",
-    clusterName: String = "RPC"
+case class ClusterConfig(
+    hostname: String = "localhost",
+    port: Int = 2551,
+    roles: Vector[String] = Vector("master"),
+    seedNodes: Vector[String] = Vector("akka://RPC@localhost:2551")
 ) {
-    val worker = ActorSystem(
-      Behaviors
-          .setup(ctx => {
-              val noderoles = Cluster(ctx.system).selfMember.roles
-              clusterEndpoints().foreach(ep => {
-                  if (noderoles.contains(ep.role)) {
-                      ep.listen(ctx.system)
-                  }
-              })
-              init(ctx.system)
-              Behaviors.same
-          }),
-      clusterName,
-      ConfigFactory.parseFile(
-        File(configName),
-        ConfigParseOptions.defaults().setSyntaxFromFilename(configName)
-      ).withFallback(ConfigFactory.parseMap(Map("akka.remote.artery.canonical.hostname" -> sys.env.getOrElse("IP","")).asJava))
-    )
+    def toConfig: Config = {
+        ConfigFactory.parseMap(
+          Map(
+            "akka.cluster.seed-nodes"               -> seedNodes.asJava,
+            "akka.remote.artery.canonical.port"     -> port,
+            "akka.remote.artery.canonical.hostname" -> hostname,
+            "akka.cluster.roles"                    -> roles.asJava
+          ).asJava
+        )
+    }
+}
+abstract class ClusterNode(
+    config: ClusterConfig = ClusterConfig()
+) {
+    var worker: ActorSystem[?] = null
+
+    def listen() = {
+        val conf = defaultConfig.withFallback(config.toConfig)
+        logger.info(s"node config: $conf")
+        worker = ActorSystem(
+          Behaviors
+              .setup(ctx => {
+                  declareEndpoints(ctx.system)
+                  init(ctx.system)
+                  Behaviors.same
+              }),
+          "RPC",
+          conf
+        )
+    }
+
+    // 初始化endpoints
+    def declareEndpoints(system: ActorSystem[?]) = {
+        val noderoles = Cluster(system).selfMember.roles
+        serveEndpoints().foreach(ep => {
+            ep.init(system)
+        })
+        involveEndpoints().foreach(ep => {
+            ep.init(system)
+        })
+    }
+
+    def defaultConfig: Config = {
+        ConfigFactory.parseMap(
+          Map(
+            "akka.cluster.jmx.multi-mbeans-in-same-jvm" -> "on",
+            "akka.actor.provider"                       -> "cluster",
+            "akka.cluster.downing-provider-class" -> "akka.cluster.sbr.SplitBrainResolverProvider"
+          ).asJava
+        )
+    }
 
     // 用户业务逻辑入口
     def init(system: ActorSystem[_]): Unit
 
-    // 可能会在该node上创建的 cluster endpoint
-    def clusterEndpoints(): Vector[ClusterEndpoint[_, _]]
+    def serveEndpoints(): Vector[ClusterEndpoint[_, _]]   = Vector.empty
+    def involveEndpoints(): Vector[ClusterEndpoint[_, _]] = Vector.empty
 
     def shutdown() = {
         worker.terminate()
