@@ -116,7 +116,7 @@ class NodeC extends ClusterNode(ClusterConfig(port = 2553)) {
     override def init(system: ActorSystem[_]): Unit = {}
 }
 
-class NodeD extends ClusterNode(ClusterConfig(port = 2554, roles= Vector("api"))) {
+class NodeD extends ClusterNode(ClusterConfig(port = 2554, role= "api")) {
     override def init(system: ActorSystem[_]): Unit = {}
     override def serveEndpoints(): Vector[ClusterEndpoint[_, _]] = {
         Vector(Api(), WorkerPool())

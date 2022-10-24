@@ -24,7 +24,7 @@ import com.typesafe.config.Config
 case class ClusterConfig(
     hostname: String = "localhost",
     port: Int = 2551,
-    roles: Vector[String] = Vector("master"),
+    role: String = "master",
     seedNodes: Vector[String] = Vector("akka://RPC@localhost:2551")
 ) {
     def toConfig: Config = {
@@ -33,13 +33,13 @@ case class ClusterConfig(
             "akka.cluster.seed-nodes"               -> seedNodes.asJava,
             "akka.remote.artery.canonical.port"     -> port,
             "akka.remote.artery.canonical.hostname" -> hostname,
-            "akka.cluster.roles"                    -> roles.asJava
+            "akka.cluster.roles"                    -> Vector(role).asJava
           ).asJava
         )
     }
 }
 abstract class ClusterNode(
-    config: ClusterConfig = ClusterConfig()
+    val config: ClusterConfig = ClusterConfig()
 ) {
     var worker: ActorSystem[?] = null
 
@@ -59,14 +59,24 @@ abstract class ClusterNode(
     }
 
     // 初始化endpoints
-    def declareEndpoints(system: ActorSystem[?]) = {
-        val noderoles = Cluster(system).selfMember.roles
-        serveEndpoints().foreach(ep => {
-            ep.init(system)
-        })
-        involveEndpoints().foreach(ep => {
-            ep.init(system)
-        })
+    def declareEndpoints(system: ActorSystem[?], declaredRole: Set[String] = Set.empty): Unit = {
+        val cluster = Cluster(system)
+        // val noderoles = cluster.selfMember.roles
+        if (!declaredRole.contains(config.role)) {
+            serveEndpoints().map(ep => {
+                logger.info(s"declare serve endpoint on node ${cluster.selfMember.uniqueAddress}")
+                ep.init(system)
+            })
+            involveEndpoints().map(ep => {
+                logger.info(s"declare involve endpoint on node ${cluster.selfMember.uniqueAddress}")
+                ep.init(system)
+                ep.typeKey.name
+            })
+            involveNode().foreach(node => {
+                logger.info(s"declare dependent node's endpoints: ${config.role} -> ${node.config.role} ")
+                node.declareEndpoints(system, declaredRole + config.role)
+            })
+        }
     }
 
     def defaultConfig: Config = {
@@ -82,8 +92,12 @@ abstract class ClusterNode(
     // 用户业务逻辑入口
     def init(system: ActorSystem[_]): Unit
 
-    def serveEndpoints(): Vector[ClusterEndpoint[_, _]]   = Vector.empty
+    def serveEndpoints(): Vector[ClusterEndpoint[_, _]] = Vector.empty
+    // 可能会调用哪些endpoint
     def involveEndpoints(): Vector[ClusterEndpoint[_, _]] = Vector.empty
+    // 或者直接声明依赖服务
+    // 不允许出现环
+    def involveNode(): Vector[ClusterNode] = Vector.empty
 
     def shutdown() = {
         worker.terminate()
