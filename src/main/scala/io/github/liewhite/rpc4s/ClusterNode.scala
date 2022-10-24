@@ -25,12 +25,12 @@ case class ClusterConfig(
     hostname: String = "localhost",
     port: Int = 2551,
     role: String = "master",
-    seedNodes: Vector[String] = Vector("akka://RPC@localhost:2551")
+    seedNodes: Vector[String] = Vector("localhost:2551")
 ) {
     def toConfig: Config = {
         ConfigFactory.parseMap(
           Map(
-            "akka.cluster.seed-nodes"               -> seedNodes.asJava,
+            "akka.cluster.seed-nodes"               -> seedNodes.map(i => "akka://RPC@" + i).asJava,
             "akka.remote.artery.canonical.port"     -> port,
             "akka.remote.artery.canonical.hostname" -> hostname,
             "akka.cluster.roles"                    -> Vector(role).asJava
@@ -39,7 +39,7 @@ case class ClusterConfig(
     }
 }
 abstract class ClusterNode(
-    val config: ClusterConfig = ClusterConfig()
+    val config: ClusterConfig
 ) {
     var worker: ActorSystem[?] = null
     def listen() = {
