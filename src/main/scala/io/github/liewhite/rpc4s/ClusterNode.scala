@@ -59,7 +59,7 @@ abstract class ClusterNode(
     def defaultConfig: Config = {
         ConfigFactory.parseMap(
           Map(
-            "akka.cluster.jmx.multi-mbeans-in-same-jvm" -> "on",
+            // "akka.cluster.jmx.multi-mbeans-in-same-jvm" -> "on",
             "akka.actor.provider"                       -> "cluster",
             "akka.remote.artery.bind.hostname"     -> "0.0.0.0",
             "akka.cluster.downing-provider-class" -> "akka.cluster.sbr.SplitBrainResolverProvider"
