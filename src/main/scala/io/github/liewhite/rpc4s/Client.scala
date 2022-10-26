@@ -178,7 +178,6 @@ class Client(
             if (multiple) {
                 requests.filterInPlace((tag, req) => {
                     if (tag <= deliveryTag) {
-                        logger.info(s"ack $tag")
                         req.sendResult.trySuccess(())
                         // 需要响应的消息不能直接filter调， 后面还有response promise
                         // 如果不需要响应， 返回false

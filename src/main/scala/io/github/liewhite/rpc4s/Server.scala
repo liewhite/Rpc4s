@@ -18,6 +18,7 @@ import scala.util.Success
 import io.github.liewhite.json.codec.*
 import io.github.liewhite.json.JsonBehavior.*
 import cats.syntax.validated
+import com.rabbitmq.client.Delivery
 
 class Server(
     val connection: Connection
@@ -43,35 +44,47 @@ class Server(
         ch.basicConsume(
           queue,
           (_, msg) => {
-              //   logger.info(s"tag: ${msg.getProperties()}")
-              val result = callback(String(msg.getBody()))
-              result.onComplete(value => {
-                  val replyTo = msg.getProperties().getReplyTo()
-                  val msgId   = msg.getProperties().getCorrelationId()
-                  // 这个是server的delivery tag, 不要和client的id搞混了
-                  val deliveryTag = msg.getEnvelope().getDeliveryTag()
-                  if (replyTo != null) {
-                      val id =
-                          msg.getProperties().getHeaders().get("deliveryTag").asInstanceOf[Long]
-
-                      ch.basicPublish(
-                        "",
-                        replyTo,
-                        false,
-                        BasicProperties()
-                            .builder()
-                            .correlationId(msgId)
-                            .headers(Map("deliveryTag" -> id).asJava)
-                            .build(),
-                        value.encode.noSpaces.getBytes()
-                      )
+              val replyTo = msg.getProperties().getReplyTo()
+              // 这个是server的delivery tag, 不要和client的id搞混了
+              val deliveryTag = msg.getEnvelope().getDeliveryTag()
+              Try(callback(String(msg.getBody()))) match {
+                  case f @ Failure(exception) => {
+                      if (replyTo != null) {
+                          reply(ch, msg, replyTo, f.encode.noSpaces.getBytes())
+                      }
+                      ch.basicAck(deliveryTag, false)
                   }
-                  ch.basicAck(deliveryTag, false)
-              })
+                  case Success(value) => {
+                      value.onComplete(value => {
+                          if (replyTo != null) {
+                              reply(ch, msg, replyTo, value.encode.noSpaces.getBytes())
+                          }
+                          ch.basicAck(deliveryTag, false)
+                      })
+                  }
+              }
+
           },
           reason => {
               logger.error(s"endpoint unexpect terminated : $reason")
           }
+        )
+    }
+    def reply(ch: Channel, msg: Delivery, replyTo: String, body: Array[Byte]) = {
+        val id =
+            msg.getProperties()
+                .getHeaders()
+                .get("deliveryTag")
+                .asInstanceOf[Long]
+        ch.basicPublish(
+          "",
+          replyTo,
+          false,
+          BasicProperties()
+              .builder()
+              .headers(Map("deliveryTag" -> id).asJava)
+              .build(),
+          body
         )
     }
 
