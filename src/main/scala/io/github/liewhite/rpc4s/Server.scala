@@ -49,8 +49,9 @@ class Server(
               val deliveryTag = msg.getEnvelope().getDeliveryTag()
               Try(callback(String(msg.getBody()))) match {
                   case f @ Failure(exception) => {
+                      val fail: Try[String] = Failure(exception)
                       if (replyTo != null) {
-                          reply(ch, msg, replyTo, f.encode.noSpaces.getBytes())
+                          reply(ch, msg, replyTo, fail.encode.noSpaces.getBytes())
                       }
                       ch.basicAck(deliveryTag, false)
                   }

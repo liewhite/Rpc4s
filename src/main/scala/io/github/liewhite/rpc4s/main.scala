@@ -12,6 +12,7 @@ case class Res(i: Int)
 class Api extends Endpoint[Req, Res]("api") {
 
     override def handler(i: Req): Future[Res] = {
+        throw Exception("xxxxxxxxx")
         Future(Res(i.i))
     }
 }
@@ -54,7 +55,7 @@ class Broad2 extends Broadcast[Req]("broadcast2") {
             api.tell(client, Req(i)).onComplete(_ => println(s"api send ok: $i"))
             api.tell(client, Req(i)).onComplete(_ => println(s"api send ok: $i"))
             // tell 发送的id， 居然带有replyTo
-            api.ask(client, Req(i)).onComplete(_ => println(s"api receive ok: $i"))
+            api.ask(client, Req(i)).onComplete(r => println(s"api receive ok: $r"))
 
             // api404.tell(client, Req(i))
             // api404.ask(client, Req(i)).onComplete(r => println(s"404 receive : $r"))
