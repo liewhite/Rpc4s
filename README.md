@@ -1,9 +1,9 @@
-# 基于akka的rpc框架
+# Rpc on rabbitmq
 
 # All-In-One example
 ## Dependency
 ```scala
-libraryDependencies += "io.github.liewhite" %% "rpc4s" % "2.0.3"
+libraryDependencies += "io.github.liewhite" %% "rpc4s" % "4.0.1"
 ```
 
 ## Code
