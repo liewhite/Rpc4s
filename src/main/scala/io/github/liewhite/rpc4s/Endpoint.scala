@@ -8,7 +8,7 @@ import scala.util.Failure
 import scala.util.Success
 import scala.concurrent.duration.*
 
-abstract class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
+class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
     // 每个endpoint 创建一个单独的channel
     def listen(server: Server, handler: I => Future[O]): Unit = {
         server.listen(
