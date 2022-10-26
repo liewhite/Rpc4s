@@ -44,6 +44,7 @@ class Server(
         ch.basicConsume(
           queue,
           (_, msg) => {
+            logger.info(s"route [$route] queue [$queue] body:  ${String(msg.getBody())}")
               val replyTo = msg.getProperties().getReplyTo()
               // 这个是server的delivery tag, 不要和client的id搞混了
               val deliveryTag = msg.getEnvelope().getDeliveryTag()
