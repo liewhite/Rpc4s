@@ -29,7 +29,7 @@ case class Request(
     rtype: RequestType,
     route: String,
     sendResult: Promise[Unit],
-    response: Promise[Array[Byte]],
+    response: Option[Promise[Array[Byte]]],
     expireAt: ZonedDateTime
 )
 
@@ -43,6 +43,7 @@ class Client(
     val requests = scala.collection.mutable.Map.empty[Long, Request]
     Future {
         while (true) {
+            logger.info(s"clean expire requests, pending: ${requests.size}")
             val now = ZonedDateTime.now()
             requests.synchronized {
                 requests.filterInPlace((_, req) => {
@@ -63,61 +64,22 @@ class Client(
     ch.confirmSelect()
 
     ch.addReturnListener(msg => {
+        logger.warn(s"no route message returned: ${msg.getExchange()} -> ${msg.getRoutingKey()}")
         returnedMsg = msg
     })
 
     ch.addConfirmListener(
+      // acked消息， 如果returnedMsg != null, 则noroute
       (deliveryTag, multiple) => {
-          requests.synchronized {
-              if (returnedMsg != null) {
-                  returnedMsg == null
-                  if (multiple) {
-                      requests.filterInPlace((tag, req) => {
-                          if (tag <= deliveryTag) {
-                              req.sendResult.failure(NoRouteErr(req.route))
-                              false
-                          } else {
-                              true
-                          }
-                      })
-                  } else {
-                      requests
-                          .get(deliveryTag)
-                          .map(req => req.sendResult.failure(NoRouteErr(req.route)))
-                  }
-              } else {
-                  if (multiple) {
-                      requests.filterInPlace((tag, req) => {
-                          if (tag <= deliveryTag) {
-                              req.sendResult.success(())
-                              false
-                          } else {
-                              true
-                          }
-                      })
-                  } else {
-                      requests.get(deliveryTag).map(_.sendResult.success(()))
-                  }
-              }
-
+          if (returnedMsg != null) {
+              returnedMsg == null
+              nack(deliveryTag, multiple, req => NoRouteErr(req.route))
+          } else {
+              ack(deliveryTag, multiple)
           }
       },
       (deliveryTag, multiple) => {
-          requests.synchronized {
-              if (multiple) {
-                  requests.filterInPlace((tag, req) => {
-                      if (tag <= deliveryTag) {
-                          req.sendResult.failure(NackErr(req.route))
-                          false
-                      } else {
-                          true
-                      }
-                  })
-              } else {
-                  requests.get(deliveryTag).map(req => req.sendResult.failure(NackErr(req.route)))
-              }
-
-          }
+          nack(deliveryTag, multiple, req => NackErr(req.route))
       }
     )
 
@@ -126,7 +88,12 @@ class Client(
       true,
       (tag, msg) => {
           val id = msg.getProperties().getHeaders().get("deliveryTag").asInstanceOf[Long]
-          requests.remove(id).map(_.response.success(msg.getBody()))
+          requests.synchronized{
+            if(!requests.contains(id)) {
+                logger.warn(s"id $id not found in request $requests")
+            }
+            requests.remove(id).map(_.response.map(_.success(msg.getBody())))
+          }
       },
       (reason) => {
           logger.error(s"callback consumer shutdown: $reason")
@@ -134,38 +101,40 @@ class Client(
       }
     )
 
-    // 不论tell还是ask， 都要确保消息已到达队列
     def tell(
         route: String,
         msg: String,
+        exchange: String = "",
+        mandatory: Boolean = true, // 广播无需确认，可能没有监听队列
         timeout: Duration = 30.second
     ): Future[Unit] = {
-        val deliveryTag = ch.getNextPublishSeqNo()
-        val rtype       = RequestType.Tell
-        val sendResult  = Promise[Unit]
-        val response    = Promise[Array[Byte]]
-        val req = Request(
-          rtype,
-          route,
-          sendResult,
-          response,
-          ZonedDateTime.now().plusSeconds(timeout.toSeconds)
-        )
-        requests.synchronized {
-            requests.addOne((deliveryTag, req))
-        }
-        val props = BasicProperties
-            .Builder()
-            .headers(Map("deliveryTag" -> deliveryTag).asJava)
+        ch.synchronized {
+            val deliveryTag = ch.getNextPublishSeqNo()
+            val rtype       = RequestType.Tell
+            val sendResult  = Promise[Unit]
+            val req = Request(
+              rtype,
+              route,
+              sendResult,
+              None,
+              ZonedDateTime.now().plusSeconds(timeout.toSeconds)
+            )
+            requests.synchronized {
+                requests.addOne((deliveryTag, req))
+            }
+            val props = BasicProperties
+                .Builder()
+                .headers(Map("deliveryTag" -> deliveryTag).asJava)
 
-        ch.basicPublish(
-          "",
-          route,
-          true,
-          props.build(),
-          msg.getBytes()
-        )
-        sendResult.future
+            ch.basicPublish(
+              exchange,
+              route,
+              mandatory,
+              props.build(),
+              msg.getBytes()
+            )
+            sendResult.future
+        }
     }
 
     def ask(
@@ -173,32 +142,81 @@ class Client(
         msg: String,
         timeout: Duration = 30.second
     ): Future[Array[Byte]] = {
-        val deliveryTag = ch.getNextPublishSeqNo()
-        val rtype       = RequestType.Ask
-        val sendResult  = Promise[Unit]
-        val response    = Promise[Array[Byte]]
-        val req = Request(
-          rtype,
-          route,
-          sendResult,
-          response,
-          ZonedDateTime.now().plusSeconds(timeout.toSeconds)
-        )
-        requests.synchronized {
-            requests.addOne((deliveryTag, req))
+        ch.synchronized {
+            val deliveryTag = ch.getNextPublishSeqNo()
+            val rtype       = RequestType.Ask
+            val sendResult  = Promise[Unit]
+            val response    = Promise[Array[Byte]]
+            val req = Request(
+              rtype,
+              route,
+              sendResult,
+              Some(response),
+              ZonedDateTime.now().plusSeconds(timeout.toSeconds)
+            )
+            requests.synchronized {
+                requests.addOne((deliveryTag, req))
+            }
+            val props = BasicProperties
+                .Builder()
+                .headers(Map("deliveryTag" -> deliveryTag).asJava)
+                .replyTo("amq.rabbitmq.reply-to")
+            ch.basicPublish(
+              "",
+              route,
+              true,
+              props.build(),
+              msg.getBytes()
+            )
+            sendResult.future.flatMap(ok => response.future)
+
         }
-        val props = BasicProperties
-            .Builder()
-            .headers(Map("deliveryTag" -> deliveryTag).asJava)
-            .replyTo("amq.rabbitmq.reply-to")
-        ch.basicPublish(
-          "",
-          route,
-          true,
-          props.build(),
-          msg.getBytes()
-        )
-        sendResult.future.flatMap(ok => response.future)
+    }
+
+    def ack(deliveryTag: Long, multiple: Boolean) = {
+        requests.synchronized {
+            if (multiple) {
+                requests.filterInPlace((tag, req) => {
+                    if (tag <= deliveryTag) {
+                        logger.info(s"ack $tag")
+                        req.sendResult.trySuccess(())
+                        // 需要响应的消息不能直接filter调， 后面还有response promise
+                        // 如果不需要响应， 返回false
+                        req.response.nonEmpty
+                    } else {
+                        true
+                    }
+                })
+            } else {
+                // ack的请求如果无需response则可以删除
+                requests.get(deliveryTag).map(_.sendResult.trySuccess(()))
+                if(requests(deliveryTag).response.isEmpty) {
+                    requests.remove(deliveryTag)
+                }
+            }
+
+        }
+    }
+    def nack(deliveryTag: Long, multiple: Boolean, err: Request => RpcErr) = {
+        logger.warn(s"message nacked $deliveryTag $multiple")
+        requests.synchronized {
+            if (multiple) {
+                requests.filterInPlace((tag, req) => {
+                    if (tag <= deliveryTag) {
+                        req.sendResult.tryFailure(err(req))
+                        false
+                    } else {
+                        true
+                    }
+                })
+            } else {
+                // nack的请求直接remove
+                requests
+                    .remove(deliveryTag)
+                    .map(req => req.sendResult.failure(err(req)))
+            }
+
+        }
     }
 
 }

@@ -22,22 +22,38 @@ import cats.syntax.validated
 class Server(
     val connection: Connection
 ) {
-
-    def listen(queue: String, callback: String => Future[String]) = {
+    // 严格顺序处理， 用户如果有异步需求就单独开Future进行处理
+    def listen(
+        route: String,
+        callback: String => Future[String],
+        defaultQueue: Option[String] = None
+    ) = {
+        val queue = defaultQueue match {
+            case None        => route
+            case Some(value) => value
+        }
         val ch = connection.connection.createChannel()
         ch.basicQos(1)
         ch.confirmSelect()
+        // 如果是广播模式， 则每个endpoint都要使用单独的队列
         ch.queueDeclare(queue, true, false, false, Map.empty[String, String].asJava)
+        if (queue != route) {
+            ch.queueBind(queue, "amq.direct", route)
+        }
         ch.basicConsume(
           queue,
           (_, msg) => {
-              val result  = callback(String(msg.getBody()))
-              val replyTo = msg.getProperties().getReplyTo()
-              val msgId   = msg.getProperties().getCorrelationId()
-              val deliveryTag =msg.getEnvelope().getDeliveryTag()
-
+              //   logger.info(s"tag: ${msg.getProperties()}")
+              val result = callback(String(msg.getBody()))
               result.onComplete(value => {
+                  val replyTo = msg.getProperties().getReplyTo()
+                  val msgId   = msg.getProperties().getCorrelationId()
+                  // 这个是server的delivery tag, 不要和client的id搞混了
+                  val deliveryTag = msg.getEnvelope().getDeliveryTag()
                   if (replyTo != null) {
+                      val id =
+                          msg.getProperties().getHeaders().get("deliveryTag").asInstanceOf[Long]
+
                       ch.basicPublish(
                         "",
                         replyTo,
@@ -45,7 +61,7 @@ class Server(
                         BasicProperties()
                             .builder()
                             .correlationId(msgId)
-                            .headers(Map("deliveryTag" -> deliveryTag).asJava)
+                            .headers(Map("deliveryTag" -> id).asJava)
                             .build(),
                         value.encode.noSpaces.getBytes()
                       )
