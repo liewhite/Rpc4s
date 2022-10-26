@@ -31,7 +31,7 @@ class Broad2 extends Broadcast[Req]("broadcast2")
             // api.tell(client, Req(i)).onComplete(_ => println(s"api send ok: $i"))
             api.tell(client, Req(i)).onComplete(_ => println(s"api send ok: $i"))
             api.ask(client, Req(i)).onComplete(r => println(s"api receive ok: $r"))
-            api404.tell(client, Req(i)).onComplete(r => println(s"404 tell result : $r"))
+            // api404.tell(client, Req(i)).onComplete(r => println(s"404 tell result : $r"))
             // api404.ask(client, Req(i)).onComplete(r => println(s"404 ask result : $r"))
         }
         Thread.sleep(1000)

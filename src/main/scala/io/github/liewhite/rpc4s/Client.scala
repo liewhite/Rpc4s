@@ -63,7 +63,7 @@ class Client(
     ch.confirmSelect()
 
     ch.addReturnListener(msg => {
-        val tag      = msg.getProperties().getHeaders().get("deliveryTag").asInstanceOf[Long]
+        val tag = msg.getProperties().getHeaders().get("deliveryTag").asInstanceOf[Long]
         // val threadId = Thread.currentThread().getId()
         logger.warn(
           s"no route message returned: $tag ${msg.getExchange()} -> ${msg.getRoutingKey()}"
