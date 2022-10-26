@@ -4,7 +4,6 @@ import com.rabbitmq.client.ConnectionFactory
 import com.rabbitmq.client.AMQP.BasicProperties
 import scala.concurrent.Await
 import scala.concurrent.duration.*
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
 case class Req(i: Int)

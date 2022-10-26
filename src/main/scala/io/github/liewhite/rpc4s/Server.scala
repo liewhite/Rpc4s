@@ -11,7 +11,6 @@ import scala.jdk.CollectionConverters.*
 import scala.concurrent.Future
 import java.time.ZonedDateTime
 import scala.concurrent.duration.*
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
 import scala.util.Failure
 import scala.util.Success

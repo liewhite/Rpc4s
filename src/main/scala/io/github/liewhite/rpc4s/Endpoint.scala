@@ -4,7 +4,6 @@ import io.github.liewhite.json.codec.*
 import io.github.liewhite.json.JsonBehavior.*
 import scala.util.Try
 import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Failure
 import scala.util.Success
 import scala.concurrent.duration.*
