@@ -9,9 +9,8 @@ import scala.util.Success
 import scala.concurrent.duration.*
 
 abstract class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
-    def handler(i: I): Future[O]
     // 每个endpoint 创建一个单独的channel
-    def listen(server: Server): Unit = {
+    def listen(server: Server, handler: I => Future[O]): Unit = {
         server.listen(
           route,
           args => {
@@ -59,9 +58,7 @@ abstract class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: Str
     }
 }
 abstract class Broadcast[I: Encoder: Decoder](route: String) {
-    def handler(i: I): Future[Unit]
-
-    def listen(server: Server, queue: String): Unit = {
+    def listen(server: Server, queue: String,handler: I => Future[Unit]): Unit = {
         server.listen(
           route,
           args => {

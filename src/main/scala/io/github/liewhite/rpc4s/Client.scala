@@ -38,7 +38,7 @@ class Client(
 ) {
     var returnedMsg: Return = null
 
-    // 所有已发送且未确认的请求 deliveryTag, Promise
+// 所有已发送且未确认的请求 deliveryTag, Promise
     val requests = scala.collection.mutable.Map.empty[Long, Request]
     Future {
         while (true) {
@@ -63,22 +63,31 @@ class Client(
     ch.confirmSelect()
 
     ch.addReturnListener(msg => {
-        logger.warn(s"no route message returned: ${msg.getExchange()} -> ${msg.getRoutingKey()}")
+        val tag      = msg.getProperties().getHeaders().get("deliveryTag").asInstanceOf[Long]
+        // val threadId = Thread.currentThread().getId()
+        logger.warn(
+          s"no route message returned: $tag ${msg.getExchange()} -> ${msg.getRoutingKey()}"
+        )
         returnedMsg = msg
     })
 
     ch.addConfirmListener(
       // acked消息， 如果returnedMsg != null, 则noroute
       (deliveryTag, multiple) => {
+
           if (returnedMsg != null) {
-              returnedMsg == null
-              nack(deliveryTag, multiple, req => NoRouteErr(req.route))
+              logger.warn(
+                s"ack with returned msg:  ${returnedMsg.getExchange()} - ${returnedMsg
+                        .getRoutingKey()} id ${returnedMsg.getProperties().getHeaders().get("deliveryTag")}, current tag: ${deliveryTag}"
+              )
+              returnedMsg = null
+              nack(deliveryTag, multiple, req => NoRouteErr(req.toString()))
           } else {
               ack(deliveryTag, multiple)
           }
       },
       (deliveryTag, multiple) => {
-          nack(deliveryTag, multiple, req => NackErr(req.route))
+          nack(deliveryTag, multiple, req => NackErr(req.toString()))
       }
     )
 
@@ -87,11 +96,11 @@ class Client(
       true,
       (tag, msg) => {
           val id = msg.getProperties().getHeaders().get("deliveryTag").asInstanceOf[Long]
-          requests.synchronized{
-            if(!requests.contains(id)) {
-                logger.warn(s"id $id not found in request $requests")
-            }
-            requests.remove(id).map(_.response.map(_.success(msg.getBody())))
+          requests.synchronized {
+              if (!requests.contains(id)) {
+                  logger.warn(s"id $id not found in request $requests")
+              }
+              requests.remove(id).map(_.response.map(_.success(msg.getBody())))
           }
       },
       (reason) => {
@@ -177,9 +186,9 @@ class Client(
             if (multiple) {
                 requests.filterInPlace((tag, req) => {
                     if (tag <= deliveryTag) {
+                        // 可能会有已经ack过的ask还存在， 所以要用try
                         req.sendResult.trySuccess(())
-                        // 需要响应的消息不能直接filter调， 后面还有response promise
-                        // 如果不需要响应， 返回false
+
                         req.response.nonEmpty
                     } else {
                         true
@@ -188,7 +197,7 @@ class Client(
             } else {
                 // ack的请求如果无需response则可以删除
                 requests.get(deliveryTag).map(_.sendResult.trySuccess(()))
-                if(requests(deliveryTag).response.isEmpty) {
+                if (requests(deliveryTag).response.isEmpty) {
                     requests.remove(deliveryTag)
                 }
             }
@@ -196,13 +205,20 @@ class Client(
         }
     }
     def nack(deliveryTag: Long, multiple: Boolean, err: Request => RpcErr) = {
-        logger.warn(s"message nacked $deliveryTag $multiple")
         requests.synchronized {
             if (multiple) {
                 requests.filterInPlace((tag, req) => {
                     if (tag <= deliveryTag) {
-                        req.sendResult.tryFailure(err(req))
-                        false
+                        if (!req.sendResult.isCompleted) {
+                            logger.warn(
+                              s"message nacked $tag / $deliveryTag $multiple ,${err(req).getMessage()}"
+                            )
+                            req.sendResult.failure(err(req))
+                            false
+                        } else {
+                            // tag 满足条件， 但是其实已经ack过了。
+                            true
+                        }
                     } else {
                         true
                     }
@@ -211,7 +227,12 @@ class Client(
                 // nack的请求直接remove
                 requests
                     .remove(deliveryTag)
-                    .map(req => req.sendResult.failure(err(req)))
+                    .map(req => {
+                        logger.warn(
+                          s"message nacked $deliveryTag $multiple  ,${err(req).getMessage()}"
+                        )
+                        req.sendResult.failure(err(req))
+                    })
             }
 
         }
