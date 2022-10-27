@@ -3,7 +3,7 @@
 # All-In-One example
 ## Dependency
 ```scala
-libraryDependencies += "io.github.liewhite" %% "rpc4s" % "4.0.1"
+libraryDependencies += "io.github.liewhite" %% "rpc4s" % "4.0.6"
 ```
 
 ## Code
