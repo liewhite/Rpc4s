@@ -10,7 +10,7 @@ import scala.concurrent.duration.*
 
 class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
     // 每个endpoint 创建一个单独的channel
-    def listen(server: Server, handler: I => Future[O]): Unit = {
+    def listen(server: Server, handler: I => Future[O], autoDelete: Boolean = false): Unit = {
         server.listen(
           route,
           args => {
@@ -19,7 +19,9 @@ class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
                   case Left(value) => throw value
                   case Right(o)    => o.map(_.encode.noSpaces)
               }
-          }
+          },
+          None,
+          autoDelete
         )
     }
 
@@ -58,7 +60,7 @@ class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
     }
 }
 abstract class Broadcast[I: Encoder: Decoder](route: String) {
-    def listen(server: Server, queue: String,handler: I => Future[Unit]): Unit = {
+    def listen(server: Server, queue: String,handler: I => Future[Unit], autoDelete: Boolean = false): Unit = {
         server.listen(
           route,
           args => {
@@ -68,11 +70,14 @@ abstract class Broadcast[I: Encoder: Decoder](route: String) {
                   case Right(o)    => o.map(_.encode.noSpaces)
               }
           },
-          Some(queue)
+          Some(queue),
+          autoDelete
         )
     }
 
-    def broadcast(client: Client, param: I): Future[Unit] = {
-        client.tell(route, param.encode.noSpaces, "amq.direct", false)
+
+    // 广播可以选择是否在没有消费者时报错。 方便自动停止生产
+    def broadcast(client: Client, param: I, mandatory: Boolean = false): Future[Unit] = {
+        client.tell(route, param.encode.noSpaces, "amq.direct", mandatory)
     }
 }

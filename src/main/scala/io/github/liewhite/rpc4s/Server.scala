@@ -26,7 +26,8 @@ class Server(
     def listen(
         route: String,
         callback: String => Future[String],
-        defaultQueue: Option[String] = None
+        defaultQueue: Option[String] = None,
+        autoDelete: Boolean = false
     ) = {
         val queue = defaultQueue match {
             case None        => route
@@ -36,7 +37,7 @@ class Server(
         ch.basicQos(1)
         ch.confirmSelect()
         // 如果是广播模式， 则每个endpoint都要使用单独的队列
-        ch.queueDeclare(queue, true, false, false, Map.empty[String, String].asJava)
+        ch.queueDeclare(queue, true, false, autoDelete, Map.empty[String, String].asJava)
         if (queue != route) {
             ch.queueBind(queue, "amq.direct", route)
         }

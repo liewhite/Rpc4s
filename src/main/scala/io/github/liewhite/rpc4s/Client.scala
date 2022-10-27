@@ -113,7 +113,7 @@ class Client(
         route: String,
         msg: String,
         exchange: String = "",
-        mandatory: Boolean = true, // 广播无需确认，可能没有监听队列
+        mandatory: Boolean = true, // 广播可能无需确认，可能没有监听队列
         timeout: Duration = 30.second
     ): Future[Unit] = {
         ch.synchronized {
