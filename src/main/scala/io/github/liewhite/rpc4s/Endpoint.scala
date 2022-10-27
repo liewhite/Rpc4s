@@ -10,7 +10,7 @@ import scala.concurrent.duration.*
 
 class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
     // 每个endpoint 创建一个单独的channel
-    def listen(server: Server, handler: I => Future[O], autoDelete: Boolean = false): Unit = {
+    def listen(server: Server, handler: I => Future[O], autoDelete: Boolean = false): Listen = {
         server.listen(
           route,
           args => {
@@ -65,7 +65,7 @@ abstract class Broadcast[I: Encoder: Decoder](route: String) {
         queue: String,
         handler: I => Future[Unit],
         autoDelete: Boolean = false
-    ): Unit = {
+    ): Listen = {
         server.listen(
           route,
           args => {
