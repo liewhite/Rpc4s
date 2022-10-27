@@ -28,10 +28,10 @@ class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
     def tell(
         client: Client,
         param: I,
-        async: Boolean = false,
-        timeout: Duration = 30.second
+        mandatory: Boolean = true,
+        timeout: Duration = 30.second,
     ): Future[Unit] = {
-        client.tell(route, param.encode.noSpaces, "", !async, timeout)
+        client.tell(route, param.encode.noSpaces, "", mandatory, timeout)
     }
 
     def ask(client: Client, param: I, timeout: Duration = 30.second): Future[O] = {
@@ -60,7 +60,12 @@ class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
     }
 }
 abstract class Broadcast[I: Encoder: Decoder](route: String) {
-    def listen(server: Server, queue: String,handler: I => Future[Unit], autoDelete: Boolean = false): Unit = {
+    def listen(
+        server: Server,
+        queue: String,
+        handler: I => Future[Unit],
+        autoDelete: Boolean = false
+    ): Unit = {
         server.listen(
           route,
           args => {
@@ -74,7 +79,6 @@ abstract class Broadcast[I: Encoder: Decoder](route: String) {
           autoDelete
         )
     }
-
 
     // 广播可以选择是否在没有消费者时报错。 方便自动停止生产
     def broadcast(client: Client, param: I, mandatory: Boolean = false): Future[Unit] = {
