@@ -19,7 +19,16 @@ import io.github.liewhite.json.JsonBehavior.*
 import cats.syntax.validated
 import com.rabbitmq.client.Delivery
 
-case class Listen(ch: Channel,exchange: String, queue: String, autoDelete: Boolean) {
+case class ServerConfig(
+    exchange: String,
+    route: String,
+    queue: Option[String] = None,
+    exclusive: Boolean = false,
+    autoDelete: Boolean = true,
+    durable: Boolean = false
+)
+
+case class Listen(ch: Channel, conf: ServerConfig) {
     def shutdown() = {
         logger.info("listen endpoint shutdown manually")
         ch.abort()
@@ -31,27 +40,34 @@ class Server(
 ) {
     // 严格顺序处理， 用户如果有异步需求就单独开Future进行处理
     def listen(
-        route: String,
-        callback: String => Future[String],
-        defaultQueue: Option[String] = None,
-        autoDelete: Boolean = false
+        conf: ServerConfig,
+        callback: String => Future[String]
     ): Listen = {
-        val queue = defaultQueue match {
-            case None        => route
+        // 如果不指定queue就与route一致
+        val queue = conf.queue match {
+            case None        => conf.route
             case Some(value) => value
         }
         val ch = connection.connection.createChannel()
         ch.basicQos(1)
         ch.confirmSelect()
         // 如果是广播模式， 则每个endpoint都要使用单独的队列
-        ch.queueDeclare(queue, true, false, autoDelete, Map.empty[String, String].asJava)
-        if (queue != route) {
-            ch.queueBind(queue, "amq.direct", route)
-        }
+        ch.queueDeclare(
+          queue,
+          conf.durable,
+          conf.exclusive,
+          conf.autoDelete,
+          Map.empty[String, String].asJava
+        )
+        // if (queue != conf.route) {
+        ch.queueBind(queue, conf.exchange, conf.route)
+        // }else {
+
+        // }
         ch.basicConsume(
           queue,
           (_, msg) => {
-              logger.info(s"route [$route] queue [$queue] body:  ${String(msg.getBody())}")
+              logger.info(s"route [${conf.route}] queue [$queue] body:  ${String(msg.getBody())}")
               val replyTo = msg.getProperties().getReplyTo()
               // 这个是server的delivery tag, 不要和client的id搞混了
               val deliveryTag = msg.getEnvelope().getDeliveryTag()
@@ -78,7 +94,7 @@ class Server(
               logger.error(s"endpoint unexpect terminated : $reason")
           }
         )
-        Listen(ch, "amq.direct", queue, autoDelete)
+        Listen(ch, conf)
     }
     def shutdownListen(listen: Listen) = {
         listen.ch.abort()

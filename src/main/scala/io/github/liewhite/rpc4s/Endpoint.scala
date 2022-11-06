@@ -10,33 +10,31 @@ import scala.concurrent.duration.*
 
 class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
     // 每个endpoint 创建一个单独的channel
-    def listen(server: Server, handler: I => Future[O], autoDelete: Boolean = false): Listen = {
+    def listen(server: Server, handler: I => Future[O]): Listen = {
         server.listen(
-          route,
+          ServerConfig("amq.topic", route, None, false, true,false),
           args => {
               val result = args.parseToJson.flatMap(_.decode[I]).map(handler(_))
               result match {
                   case Left(value) => throw value
                   case Right(o)    => o.map(_.encode.noSpaces)
               }
-          },
-          None,
-          autoDelete
+          }
         )
     }
 
     def tell(
         client: Client,
         param: I,
-        mandatory: Boolean = true,
-        timeout: Duration = 30.second,
+        mandatory: Boolean = false,
+        timeout: Duration = 30.second
     ): Future[Unit] = {
-        client.tell(route, param.encode.noSpaces, "", mandatory, timeout)
+        client.tell(route, ClientConfig("amq.topic", route, mandatory), timeout)
     }
 
     def ask(client: Client, param: I, timeout: Duration = 30.second): Future[O] = {
         val result = client
-            .ask(route, param.encode.noSpaces, timeout)
+            .ask(param.encode.noSpaces, ClientConfig("amq.topic", route), timeout)
             .map(bytes => {
                 String(bytes).parseToJson.flatMap(_.decode[Try[String]])
             })
@@ -64,24 +62,21 @@ abstract class Broadcast[I: Encoder: Decoder](route: String) {
         server: Server,
         queue: String,
         handler: I => Future[Unit],
-        autoDelete: Boolean = false
     ): Listen = {
         server.listen(
-          route,
+          ServerConfig("amq.topic", route, Some(queue), false),
           args => {
               val result = args.parseToJson.flatMap(_.decode[I]).map(handler(_))
               result match {
                   case Left(value) => throw value
                   case Right(o)    => o.map(_.encode.noSpaces)
               }
-          },
-          Some(queue),
-          autoDelete
+          }
         )
     }
 
     // 广播可以选择是否在没有消费者时报错。 方便自动停止生产
     def broadcast(client: Client, param: I, mandatory: Boolean = false): Future[Unit] = {
-        client.tell(route, param.encode.noSpaces, "amq.direct", mandatory)
+        client.tell( param.encode.noSpaces,ClientConfig("amq.topic", route,mandatory))
     }
 }

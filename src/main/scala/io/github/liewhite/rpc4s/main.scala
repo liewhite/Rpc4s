@@ -20,7 +20,10 @@ class Broad       extends Broadcast[Req]("broadcast3")
     val api    = Api()
     val api404 = NotFoundApi()
 
-    api.listen(server, req => Future(Res(req.i)))
+    api.listen(server, req => {
+        println(s"api receive $req")
+        Future(Res(req.i))
+    })
     val lsn = Broad().listen(
       server,
       "q3",
@@ -28,7 +31,6 @@ class Broad       extends Broadcast[Req]("broadcast3")
           println(s"q3 receive $req")
           Future(())
       },
-      true
     )
     // Broad().listen(
     //   server,
@@ -51,11 +53,11 @@ class Broad       extends Broadcast[Req]("broadcast3")
             // api.tell(client, Req(i)).onComplete(_ => println(s"api send ok: $i"))
             api.ask(client, Req(i)).onComplete(r => println(s"api receive ok: $r"))
             // api404.tell(client, Req(i)).onComplete(r => println(s"404 tell result : $r"))
-            // api404.ask(client, Req(i)).onComplete(r => println(s"404 ask result : $r"))
+            api404.ask(client, Req(i)).onComplete(r => println(s"404 ask result : $r"))
         }
-        if(i > 50) {
-            lsn.shutdown()
-        }
-        Thread.sleep(100)
+        // if(i > 50) {
+        //     lsn.shutdown()
+        // }
+        // Thread.sleep(100)
     })
 }

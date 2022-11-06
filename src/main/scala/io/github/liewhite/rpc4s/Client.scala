@@ -18,6 +18,12 @@ class NoRouteErr(msg: String) extends RpcErr(s"no route err: $msg")
 class NackErr(msg: String)    extends RpcErr(s"nack by broker err: $msg")
 class TimeoutErr(msg: String) extends RpcErr(s"request timeout : $msg")
 
+case class ClientConfig(
+    exchange: String,
+    route: String,
+    mandatory: Boolean = true
+)
+
 class BrokerResponse(msg: Array[Byte])
 enum RequestType {
     case Tell
@@ -36,8 +42,6 @@ case class Request(
 class Client(
     val connection: Connection
 ) {
-    var returnedMsg: Return = null
-
 // 所有已发送且未确认的请求 deliveryTag, Promise
     val requests = scala.collection.mutable.Map.empty[Long, Request]
     Future {
@@ -64,27 +68,15 @@ class Client(
 
     ch.addReturnListener(msg => {
         val tag = msg.getProperties().getHeaders().get("deliveryTag").asInstanceOf[Long]
-        // val threadId = Thread.currentThread().getId()
+        nack(tag, false, req => NoRouteErr(req.toString()))
         logger.warn(
           s"no route message returned: $tag ${msg.getExchange()} -> ${msg.getRoutingKey()}"
         )
-        returnedMsg = msg
     })
 
     ch.addConfirmListener(
-      // acked消息， 如果returnedMsg != null, 则noroute
       (deliveryTag, multiple) => {
-
-          if (returnedMsg != null) {
-              logger.warn(
-                s"ack with returned msg:  ${returnedMsg.getExchange()} - ${returnedMsg
-                        .getRoutingKey()} id ${returnedMsg.getProperties().getHeaders().get("deliveryTag")}, current tag: ${deliveryTag}"
-              )
-              returnedMsg = null
-              nack(deliveryTag, multiple, req => NoRouteErr(req.toString()))
-          } else {
-              ack(deliveryTag, multiple)
-          }
+          ack(deliveryTag, multiple)
       },
       (deliveryTag, multiple) => {
           nack(deliveryTag, multiple, req => NackErr(req.toString()))
@@ -110,19 +102,18 @@ class Client(
     )
 
     def tell(
-        route: String,
         msg: String,
-        exchange: String = "",
-        mandatory: Boolean = true, // 广播可能无需确认，可能没有监听队列
+        conf: ClientConfig,
         timeout: Duration = 30.second
     ): Future[Unit] = {
         ch.synchronized {
             val deliveryTag = ch.getNextPublishSeqNo()
-            val rtype       = RequestType.Tell
-            val sendResult  = Promise[Unit]
+            logger.info(s"tell seq: $deliveryTag")
+            val rtype      = RequestType.Tell
+            val sendResult = Promise[Unit]
             val req = Request(
               rtype,
-              route,
+              conf.route,
               sendResult,
               None,
               ZonedDateTime.now().plusSeconds(timeout.toSeconds)
@@ -135,9 +126,9 @@ class Client(
                 .headers(Map("deliveryTag" -> deliveryTag).asJava)
 
             ch.basicPublish(
-              exchange,
-              route,
-              mandatory,
+              conf.exchange,
+              conf.route,
+              conf.mandatory,
               props.build(),
               msg.getBytes()
             )
@@ -146,18 +137,19 @@ class Client(
     }
 
     def ask(
-        route: String,
         msg: String,
+        conf: ClientConfig,
         timeout: Duration = 30.second
     ): Future[Array[Byte]] = {
         ch.synchronized {
             val deliveryTag = ch.getNextPublishSeqNo()
-            val rtype       = RequestType.Ask
-            val sendResult  = Promise[Unit]
-            val response    = Promise[Array[Byte]]
+            logger.info(s"ask seq: $deliveryTag")
+            val rtype      = RequestType.Ask
+            val sendResult = Promise[Unit]
+            val response   = Promise[Array[Byte]]
             val req = Request(
               rtype,
-              route,
+              conf.route,
               sendResult,
               Some(response),
               ZonedDateTime.now().plusSeconds(timeout.toSeconds)
@@ -170,14 +162,13 @@ class Client(
                 .headers(Map("deliveryTag" -> deliveryTag).asJava)
                 .replyTo("amq.rabbitmq.reply-to")
             ch.basicPublish(
-              "",
-              route,
+              conf.exchange,
+              conf.route,
               true,
               props.build(),
               msg.getBytes()
             )
             sendResult.future.flatMap(ok => response.future)
-
         }
     }
 
@@ -188,7 +179,6 @@ class Client(
                     if (tag <= deliveryTag) {
                         // 可能会有已经ack过的ask还存在， 所以要用try
                         req.sendResult.trySuccess(())
-
                         req.response.nonEmpty
                     } else {
                         true
@@ -197,7 +187,7 @@ class Client(
             } else {
                 // ack的请求如果无需response则可以删除
                 requests.get(deliveryTag).map(_.sendResult.trySuccess(()))
-                if (requests(deliveryTag).response.isEmpty) {
+                if (requests.contains(deliveryTag) && requests(deliveryTag).response.isEmpty) {
                     requests.remove(deliveryTag)
                 }
             }
@@ -205,6 +195,7 @@ class Client(
         }
     }
     def nack(deliveryTag: Long, multiple: Boolean, err: Request => RpcErr) = {
+        logger.warn(s"nack $deliveryTag, $multiple")
         requests.synchronized {
             if (multiple) {
                 requests.filterInPlace((tag, req) => {
