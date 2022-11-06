@@ -108,7 +108,6 @@ class Client(
     ): Future[Unit] = {
         ch.synchronized {
             val deliveryTag = ch.getNextPublishSeqNo()
-            logger.info(s"tell seq: $deliveryTag")
             val rtype      = RequestType.Tell
             val sendResult = Promise[Unit]
             val req = Request(
@@ -143,7 +142,6 @@ class Client(
     ): Future[Array[Byte]] = {
         ch.synchronized {
             val deliveryTag = ch.getNextPublishSeqNo()
-            logger.info(s"ask seq: $deliveryTag")
             val rtype      = RequestType.Ask
             val sendResult = Promise[Unit]
             val response   = Promise[Array[Byte]]
@@ -195,7 +193,6 @@ class Client(
         }
     }
     def nack(deliveryTag: Long, multiple: Boolean, err: Request => RpcErr) = {
-        logger.warn(s"nack $deliveryTag, $multiple")
         requests.synchronized {
             if (multiple) {
                 requests.filterInPlace((tag, req) => {
