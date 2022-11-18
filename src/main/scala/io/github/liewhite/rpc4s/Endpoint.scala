@@ -8,6 +8,13 @@ import scala.util.Failure
 import scala.util.Success
 import scala.concurrent.duration.*
 
+
+given[T]: Conversion[T, Future[T]] with {
+    def apply(t: T): Future[T] = {
+        Future(t)
+    }
+}
+
 class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
     // 每个endpoint 创建一个单独的channel
     def listen(server: Server, handler: I => Future[O]): Listen = {

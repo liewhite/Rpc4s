@@ -22,14 +22,13 @@ class Broad       extends Broadcast[Req]("broadcast3")
 
     api.listen(server, req => {
         println(s"api receive $req")
-        Future(Res(req.i))
+        Res(req.i)
     })
     val lsn = Broad().listen(
       server,
       "q3",
       req => {
           println(s"q3 receive $req")
-          Future(())
       },
     )
     // Broad().listen(
