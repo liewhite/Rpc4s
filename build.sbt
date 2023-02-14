@@ -12,9 +12,12 @@ lazy val root = project
     .in(file("."))
     .settings(
       name                                        := "rpc4s",
-      libraryDependencies += "io.github.liewhite" %% "json" % "1.0.1",
-      libraryDependencies += "com.rabbitmq" % "amqp-client" % "5.16.0",
-      libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.11",
-      libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
-      libraryDependencies += "org.scalameta" %% "munit"           % "0.7.29" % Test
+      libraryDependencies += "io.github.liewhite" %% "common"                       % "0.0.3",
+      libraryDependencies += "org.typelevel"      %% "shapeless3-deriving"          % "3.0.3",
+      libraryDependencies += "dev.zio"            %% "zio"                          % "2.0.6",
+      libraryDependencies += "dev.zio"            %% "zio-json"                     % "0.4.2",
+      libraryDependencies += "com.devsisters"     %% "shardcake-manager"            % "2.0.5",
+      libraryDependencies += "com.devsisters"     %% "shardcake-protocol-grpc"      % "2.0.5",
+      libraryDependencies += "com.devsisters"     %% "shardcake-serialization-kryo" % "2.0.5",
+      libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test
     )

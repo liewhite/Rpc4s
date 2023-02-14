@@ -1,89 +1,162 @@
 package io.github.liewhite.rpc4s
 
-import io.github.liewhite.json.codec.*
-import io.github.liewhite.json.JsonBehavior.*
-import scala.util.Try
-import scala.concurrent.Future
-import scala.util.Failure
-import scala.util.Success
-import scala.concurrent.duration.*
+import zio.json.*
+import com.devsisters.shardcake.EntityType
+import zio.Dequeue
+import zio.*
+import scala.util.*
+import com.devsisters.shardcake.Replier
+import com.devsisters.shardcake.Sharding
+import zio.URIO
+import zio.json.internal.Write
+import java.io.PrintWriter
+import java.io.StringWriter
+import zio.json.internal.RetractReader
+import zio.json.ast.Json
+import cats.syntax.validated
 
+case class Timeout() extends Exception("timeout")
+given JsonDecoder[Replier[String]] = JsonDecoder.derived[Replier[String]]
+given JsonEncoder[Replier[String]] = JsonEncoder.derived[Replier[String]]
 
-given[T]: Conversion[T, Future[T]] with {
-    def apply(t: T): Future[T] = {
-        Future(t)
-    }
+given JsonEncoder[Throwable] = new JsonEncoder[Throwable] {
+
+  override def unsafeEncode(
+      a: Throwable,
+      indent: Option[Int],
+      out: Write
+  ): Unit = {
+    val brief = a.toString()
+    val stackWriter = new PrintWriter(new StringWriter())
+    val stack = a.printStackTrace(stackWriter)
+    out.write(
+      Map[String, String](
+        "cause" -> brief,
+        "stack" -> stackWriter.toString()
+      ).toJson
+    )
+  }
+
 }
+given JsonDecoder[Throwable] = JsonDecoder
+  .map[String, String]
+  .map(item => {
+    val e = new Exception(item("cause"))
+    e
+  })
 
-class Endpoint[I: Encoder: Decoder, O: Encoder: Decoder](var route: String) {
-    // 每个endpoint 创建一个单独的channel
-    def listen(server: Server, handler: I => Future[O]): Listen = {
-        server.listen(
-          ServerConfig("amq.topic", route, None, false, true,false),
-          args => {
-              val result = args.parseToJson.flatMap(_.decode[I]).map(handler(_))
-              result match {
-                  case Left(value) => throw value
-                  case Right(o)    => o.map(_.encode.noSpaces)
+private[rpc4s] case class Request(sender: Replier[String], req: Json)
+    derives JsonDecoder,
+      JsonEncoder
+// private[rpc4s] case class Response[Out](res: In) derives JsonDecoder
+
+class Endpoint[In: JsonDecoder: JsonEncoder, Out: JsonEncoder: JsonDecoder](
+    val name: String,
+    val keepAlive: zio.Duration = 30.second
+) {
+
+  def registerSharding(
+      handler: (id: String, in: In) => Task[Out]
+  ): ZIO[Scope & Sharding, Nothing, Unit] = {
+    for {
+      result <- Sharding.registerEntity(entityType, genHandler(handler))
+    } yield result
+  }
+
+  def tell(in: In, id: String = "singleton"): ZIO[Sharding, Nothing, Unit] = {
+    for {
+      messenger <- Sharding.messenger[String](entityType)
+      res <- messenger.sendDiscard(id)(getRequest(Replier(""), in))
+    } yield res
+  }
+
+  def ask(in: In, id: String = "singleton"): ZIO[Sharding, Throwable, Out] = {
+    val r = for {
+      messenger <- Sharding.messenger[String](entityType)
+      res <- messenger.send[String](id)(r => getRequest(r, in))
+    } yield {
+      val out =
+        res.fromJson[Either[Throwable, Out]].left.map(Exception(_)).flatten
+      ZIO.fromEither(out)
+    }
+    r.flatten
+  }
+
+  private def getRequest(replier: Replier[String], in: In): String = {
+    Request(replier, in.toJsonAST.toOption.get).toJson
+  }
+
+  private def entityType = new EntityType[String](name) {}
+
+  protected def genHandler(
+      f: (id: String, in: In) => Task[Out]
+  ): (id: String, q: Dequeue[String]) => RIO[Sharding, Nothing] = {
+    (id: String, q: Dequeue[String]) =>
+      {
+        (for {
+          str <- q.take.timeout(this.keepAlive)
+          out <- {
+            str match {
+              case None => {
+                for {
+                  _ <- ZIO.logInfo(
+                    s"entity timeout and exit... ${entityType.name} $id"
+                  )
+                  _ <- ZIO.interrupt
+                } yield ()
               }
-          }
-        )
-    }
+              case Some(s) => {
+                val req = s
+                  .fromJson[Request]
+                  .left
+                  .map(Exception(_).fillInStackTrace())
+                req match {
+                  case Left(e) => {
+                    ZIO.logWarning(s"bad request: $str, err: $e")
+                  }
+                  case Right(value) => {
 
-    def tell(
-        client: Client,
-        param: I,
-        mandatory: Boolean = false,
-        timeout: Duration = 30.second
-    ): Future[Unit] = {
-        client.tell(route, ClientConfig("amq.topic", route, mandatory), timeout)
-    }
-
-    def ask(client: Client, param: I, timeout: Duration = 30.second): Future[O] = {
-        val result = client
-            .ask(param.encode.noSpaces, ClientConfig("amq.topic", route), timeout)
-            .map(bytes => {
-                String(bytes).parseToJson.flatMap(_.decode[Try[String]])
-            })
-        result.map(item => {
-            item match {
-                case Left(value) => {
-                    throw value
-                }
-                case Right(value) => {
-                    value match {
-                        case Failure(exception) => throw exception
-                        case Success(value) =>
-                            value.parseToJson.flatMap(_.decode[O]) match {
-                                case Left(value)  => throw value
-                                case Right(value) => value
-                            }
+                    val result = value.req
+                      .as[In]
+                      .left
+                      .map(Exception(_))
+                      .flatMap(p => {
+                        Try {
+                          f(id, p)
+                        }.toEither
+                      })
+                    val payload = result.fold(
+                      e => {
+                        val payload: Either[Throwable, Out] = Left(e)
+                        ZIO.succeed(payload.toJson)
+                      },
+                      v => {
+                        v.map(item => {
+                          val payload: Either[Throwable, Out] = Right(item)
+                          payload.toJson
+                        }).catchAll(e => {
+                          val payload: Either[Throwable, Out] = Left(e)
+                          ZIO.succeed(payload.toJson)
+                        })
+                      }
+                    )
+                    val sender = value.sender
+                    if (sender.id == "") {
+                      ZIO.unit
+                    } else {
+                      for {
+                        v <- payload
+                        _ <- sender.reply(v)
+                      } yield ()
                     }
+                  }
                 }
-            }
-        })
-    }
-}
-abstract class Broadcast[I: Encoder: Decoder](route: String) {
-    def listen(
-        server: Server,
-        queue: String,
-        handler: I => Future[Unit],
-    ): Listen = {
-        server.listen(
-          ServerConfig("amq.topic", route, Some(queue), false),
-          args => {
-              val result = args.parseToJson.flatMap(_.decode[I]).map(handler(_))
-              result match {
-                  case Left(value) => throw value
-                  case Right(o)    => o.map(_.encode.noSpaces)
               }
+            }
           }
-        )
-    }
-
-    // 广播可以选择是否在没有消费者时报错。 方便自动停止生产
-    def broadcast(client: Client, param: I, mandatory: Boolean = false): Future[Unit] = {
-        client.tell( param.encode.noSpaces,ClientConfig("amq.topic", route,mandatory))
-    }
+        } yield {
+          out
+        }).forever
+      }
+  }
 }
